@@ -1,3 +1,1 @@
-// @mdedit/core — public API
-// Will be populated as features are built
-export {};
+export { createEditor, type EditorConfig } from './editor';
