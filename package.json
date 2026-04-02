@@ -2,8 +2,8 @@
   "name": "mdedit",
   "private": true,
   "scripts": {
-    "dev": "pnpm --filter @mdedit/desktop dev",
-    "build": "pnpm --filter @mdedit/core build && pnpm --filter @mdedit/desktop build",
+    "dev": "pnpm --filter @mdedit/desktop tauri dev",
+    "build": "pnpm --filter @mdedit/core build && pnpm --filter @mdedit/desktop tauri build",
     "test": "pnpm --filter @mdedit/core test",
     "core:dev": "pnpm --filter @mdedit/core dev",
     "core:test": "pnpm --filter @mdedit/core test"
