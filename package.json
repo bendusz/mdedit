@@ -1,0 +1,16 @@
+{
+  "name": "mdedit",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @mdedit/desktop dev",
+    "build": "pnpm --filter @mdedit/core build && pnpm --filter @mdedit/desktop build",
+    "test": "pnpm --filter @mdedit/core test",
+    "core:dev": "pnpm --filter @mdedit/core dev",
+    "core:test": "pnpm --filter @mdedit/core test"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}
