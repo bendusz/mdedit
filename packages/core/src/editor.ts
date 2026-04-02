@@ -1,4 +1,4 @@
-import { EditorState } from '@codemirror/state';
+import { Annotation, EditorState } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
@@ -18,6 +18,17 @@ export interface EditorConfig {
   onDocChange?: (content: string) => void;
 }
 
+/** Annotation to mark transactions that load file content (not user edits). */
+export const isFileLoad = Annotation.define<boolean>();
+
+/** Replace the entire editor content, annotated as a file load (skips onDocChange). */
+export function loadEditorContent(view: EditorView, newContent: string) {
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: newContent },
+    annotations: [isFileLoad.of(true)],
+  });
+}
+
 /** Detect whether the original content uses CRLF or LF line endings. */
 export function detectLineSeparator(content: string): LineSeparator {
   return content.includes('\r\n') ? '\r\n' : '\n';
@@ -28,7 +39,10 @@ export function createEditor(config: EditorConfig): EditorView {
 
   const updateListener = EditorView.updateListener.of((update) => {
     if (update.docChanged && onDocChange) {
-      onDocChange(update.state.doc.toString());
+      const isLoad = update.transactions.some((t) => t.annotation(isFileLoad));
+      if (!isLoad) {
+        onDocChange(update.state.doc.toString());
+      }
     }
   });
 
