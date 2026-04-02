@@ -10,10 +10,17 @@ import {
 } from '@codemirror/language';
 import { search, searchKeymap } from '@codemirror/search';
 
+export type LineSeparator = '\n' | '\r\n';
+
 export interface EditorConfig {
   parent: HTMLElement;
   content: string;
   onDocChange?: (content: string) => void;
+}
+
+/** Detect whether the original content uses CRLF or LF line endings. */
+export function detectLineSeparator(content: string): LineSeparator {
+  return content.includes('\r\n') ? '\r\n' : '\n';
 }
 
 export function createEditor(config: EditorConfig): EditorView {

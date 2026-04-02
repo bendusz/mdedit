@@ -1,1 +1,1 @@
-export { createEditor, type EditorConfig } from './editor';
+export { createEditor, detectLineSeparator, type EditorConfig, type LineSeparator } from './editor';
