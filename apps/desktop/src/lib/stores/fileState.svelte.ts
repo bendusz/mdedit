@@ -1,10 +1,13 @@
 /** Reactive file state store using Svelte 5 runes. */
 
+import { detectLineSeparator, type LineSeparator } from '@mdedit/core';
+
 let path = $state<string | null>(null);
 let filename = $state<string | null>(null);
 let isDirty = $state(false);
 let content = $state('');
 let revision = $state(0);
+let lineSep = $state<LineSeparator>('\n');
 
 export const fileState = {
   get path() {
@@ -22,11 +25,15 @@ export const fileState = {
   get revision() {
     return revision;
   },
+  get lineSeparator() {
+    return lineSep;
+  },
 
-  /** Set file info after open/save-as. Clears dirty flag. */
+  /** Set file info after open/save-as. Detects line endings. Clears dirty flag. */
   setFile(filePath: string, fileName: string, fileContent: string) {
     path = filePath;
     filename = fileName;
+    lineSep = detectLineSeparator(fileContent);
     content = fileContent;
     isDirty = false;
   },

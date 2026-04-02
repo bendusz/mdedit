@@ -22,13 +22,21 @@
     }
   }
 
+  /** Get content with original line endings restored for saving. */
+  function contentForSave(): string {
+    if (fileState.lineSeparator === '\r\n') {
+      return fileState.content.replace(/\n/g, '\r\n');
+    }
+    return fileState.content;
+  }
+
   async function handleSave() {
     if (!fileState.path) {
       return handleSaveAs();
     }
     const rev = fileState.revision;
     try {
-      await saveFile(fileState.path, fileState.content);
+      await saveFile(fileState.path, contentForSave());
       fileState.markSaved(rev);
     } catch (e) {
       console.error('Failed to save file:', e);
@@ -38,7 +46,7 @@
   async function handleSaveAs() {
     const rev = fileState.revision;
     try {
-      const result = await saveFileAsDialog(fileState.content);
+      const result = await saveFileAsDialog(contentForSave());
       if (result) {
         fileState.setFile(result.path, result.filename, result.content);
         fileState.markSaved(rev);
@@ -55,16 +63,17 @@
 
   function handleKeydown(e: KeyboardEvent) {
     const mod = e.metaKey || e.ctrlKey;
-    if (mod && e.key === 'o') {
-      e.preventDefault();
-      handleOpen();
-    } else if (mod && e.shiftKey && e.key === 's') {
+    const key = e.key.toLowerCase();
+    if (mod && e.shiftKey && key === 's') {
       e.preventDefault();
       handleSaveAs();
-    } else if (mod && e.key === 's') {
+    } else if (mod && key === 'o') {
+      e.preventDefault();
+      handleOpen();
+    } else if (mod && key === 's') {
       e.preventDefault();
       handleSave();
-    } else if (mod && e.key === 'n') {
+    } else if (mod && key === 'n') {
       e.preventDefault();
       handleNew();
     }
