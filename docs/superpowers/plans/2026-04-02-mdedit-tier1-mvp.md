@@ -27,7 +27,7 @@
 - `tsconfig.json`
 - `vite.config.ts` — library build config
 - `src/index.ts` — public API barrel export
-- `src/editor.ts` — `createEditor()` factory
+- `src/editor.ts` — `createEditor()` factory, `isFileLoad` annotation, `setEditorTheme()`
 - `src/extensions/live-preview.ts` — decoration barrel, styles, exports
 - `src/extensions/heading-decoration.ts` — heading-specific decoration logic
 - `src/extensions/inline-decoration.ts` — bold, italic, strikethrough decorations
@@ -581,6 +581,8 @@ git commit -m "feat(app): mount CodeMirror editor in Tauri shell"
 
 **User Story:** As a user, I can open a `.md` file with Cmd+O and save it with Cmd+S so that I can work with real files.
 
+**Security architecture:** The Rust backend owns BOTH the native dialogs AND file I/O. The webview never directly calls dialog APIs or handles raw file paths from dialogs. The frontend invokes high-level commands (`open_file_dialog`, `save_file`, `save_file_as_dialog`) and receives only content and metadata. This keeps the trust boundary narrow per the spec.
+
 **Files:**
 - Create: `apps/desktop/src-tauri/src/commands.rs`
 - Modify: `apps/desktop/src-tauri/src/lib.rs`
@@ -591,66 +593,130 @@ git commit -m "feat(app): mount CodeMirror editor in Tauri shell"
 - Modify: `apps/desktop/src-tauri/Cargo.toml`
 - Modify: `apps/desktop/src-tauri/capabilities/default.json`
 
-- [ ] **Step 1: Add Tauri dialog plugin to Cargo.toml**
+- [ ] **Step 1: Add Tauri dialog plugin to Cargo.toml (Rust-side only)**
 
 Check latest Tauri 2 docs for the current plugin crate name and add to `apps/desktop/src-tauri/Cargo.toml` dependencies:
 ```toml
 tauri-plugin-dialog = "2"
 ```
 
-**Security note:** Do NOT add `tauri-plugin-fs`. All filesystem access goes through our explicit Rust commands (`open_file`, `save_file`). The webview should have no ambient filesystem access — this is a core security boundary from the spec.
+**Security notes:**
+- Do NOT add `tauri-plugin-fs`. All filesystem access goes through explicit Rust commands.
+- Do NOT install `@tauri-apps/plugin-dialog` on the JS side. Dialogs are invoked from Rust only.
+- The webview should have no ambient filesystem or dialog access.
 
-- [ ] **Step 2: Implement Rust file commands**
+- [ ] **Step 2: Implement Rust file commands with dialogs in Rust**
 
 Create `apps/desktop/src-tauri/src/commands.rs`:
 ```rust
 use std::fs;
 use std::path::PathBuf;
+use tauri::AppHandle;
+use tauri_plugin_dialog::DialogExt;
 
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, Clone)]
 pub struct FileData {
     pub path: String,
     pub content: String,
     pub filename: String,
 }
 
-#[tauri::command]
-pub async fn open_file(path: String) -> Result<FileData, String> {
-    let path_buf = PathBuf::from(&path);
-    let content = fs::read_to_string(&path_buf)
+fn validate_and_read(path_buf: &PathBuf) -> Result<FileData, String> {
+    if !path_buf.is_absolute() {
+        return Err("Path must be absolute".to_string());
+    }
+    let content = fs::read_to_string(path_buf)
         .map_err(|e| format!("Failed to read file: {}", e))?;
     let filename = path_buf
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "Untitled".to_string());
-
     Ok(FileData {
-        path,
+        path: path_buf.to_string_lossy().to_string(),
         content,
         filename,
     })
 }
 
-#[tauri::command]
-pub async fn save_file(path: String, content: String) -> Result<(), String> {
-    // Atomic save: write to temp file in same directory, then rename.
-    // This prevents corruption if the process is interrupted mid-write.
-    let target = PathBuf::from(&path);
+fn atomic_write(path: &str, content: &str) -> Result<(), String> {
+    let target = PathBuf::from(path);
+    if !target.is_absolute() {
+        return Err("Path must be absolute".to_string());
+    }
     let dir = target.parent().ok_or("Invalid file path")?;
     let tmp_path = dir.join(format!(".mdedit-save-{}", std::process::id()));
 
-    fs::write(&tmp_path, &content)
+    fs::write(&tmp_path, content)
         .map_err(|e| format!("Failed to write temp file: {}", e))?;
 
     fs::rename(&tmp_path, &target).map_err(|e| {
-        // Clean up temp file on rename failure
         fs::remove_file(&tmp_path).ok();
         format!("Failed to save file: {}", e)
     })?;
-
     Ok(())
 }
+
+/// Open a file by path (used for recent files, drag-drop, file association).
+/// The path must have originated from a prior Rust-controlled action.
+#[tauri::command]
+pub async fn open_file(path: String) -> Result<FileData, String> {
+    let path_buf = PathBuf::from(&path);
+    validate_and_read(&path_buf)
+}
+
+/// Show native open dialog, read the selected file, return content.
+/// The dialog is shown by Rust — the webview never touches the dialog API.
+#[tauri::command]
+pub async fn open_file_dialog(app: AppHandle) -> Result<Option<FileData>, String> {
+    // Check latest Tauri 2 dialog docs for the blocking/async dialog API.
+    // The dialog plugin provides file_dialog().blocking_pick_file() or async variants.
+    let dialog = app.dialog().file();
+    let file_path = dialog
+        .add_filter("Markdown", &["md", "markdown", "mdx"])
+        .blocking_pick_file();
+
+    match file_path {
+        Some(path) => {
+            let path_buf = path.path.to_path_buf();
+            Ok(Some(validate_and_read(&path_buf)?))
+        }
+        None => Ok(None), // User cancelled
+    }
+}
+
+/// Save content to a known path (set by a prior open or save-as).
+#[tauri::command]
+pub async fn save_file(path: String, content: String) -> Result<(), String> {
+    atomic_write(&path, &content)
+}
+
+/// Show native save-as dialog, write the file, return the chosen path.
+#[tauri::command]
+pub async fn save_file_as_dialog(app: AppHandle, content: String) -> Result<Option<FileData>, String> {
+    let dialog = app.dialog().file();
+    let file_path = dialog
+        .add_filter("Markdown", &["md", "markdown"])
+        .blocking_save_file();
+
+    match file_path {
+        Some(path) => {
+            let path_str = path.path.to_string_lossy().to_string();
+            atomic_write(&path_str, &content)?;
+            let filename = path.path.file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| "Untitled".to_string());
+            Ok(Some(FileData {
+                path: path_str,
+                content,
+                filename,
+            }))
+        }
+        None => Ok(None),
+    }
+}
 ```
+
+**Note:** Check the latest Tauri 2 dialog plugin docs for the exact API. The dialog methods may use `blocking_pick_file()` / `blocking_save_file()` or async equivalents. Adjust accordingly.
 
 - [ ] **Step 3: Register commands and plugins in lib.rs**
 
@@ -663,18 +729,18 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::open_file,
+            commands::open_file_dialog,
             commands::save_file,
+            commands::save_file_as_dialog,
         ])
         .run(tauri::generate_context!())
         .expect("error while running mdedit");
 }
 ```
 
-Ensure `main.rs` calls the run function from lib. Check the Tauri 2 scaffolded code for the exact lib crate name and adjust accordingly.
+- [ ] **Step 4: Update Tauri capabilities (minimal permissions)**
 
-- [ ] **Step 4: Update Tauri capabilities for dialog and fs**
-
-Update `apps/desktop/src-tauri/capabilities/default.json` to include dialog and fs permissions. Check latest Tauri 2 docs for the exact capability format:
+Update `apps/desktop/src-tauri/capabilities/default.json`:
 ```json
 {
   "$schema": "../gen/schemas/desktop-schema.json",
@@ -682,63 +748,62 @@ Update `apps/desktop/src-tauri/capabilities/default.json` to include dialog and 
   "description": "Default capabilities for mdedit",
   "windows": ["main"],
   "permissions": [
-    "core:default",
-    "dialog:default",
-    "dialog:allow-open",
-    "dialog:allow-save"
+    "core:default"
   ]
 }
 ```
 
-- [ ] **Step 5: Create TypeScript file operation wrappers**
+**No dialog or fs permissions for the webview.** The dialog plugin is used Rust-side only — the webview invokes Tauri commands, which internally use the plugin. Check the latest Tauri 2 docs to confirm whether `dialog:default` is needed for Rust-side usage or only for JS-side.
 
-Install the Tauri JS plugins:
+- [ ] **Step 5: Create TypeScript file operation wrappers (thin invoke layer)**
+
+Install only the Tauri core API:
 ```bash
 cd apps/desktop
-pnpm add @tauri-apps/api @tauri-apps/plugin-dialog
+pnpm add @tauri-apps/api
 cd ../..
 ```
+
+**Do NOT install `@tauri-apps/plugin-dialog` or `@tauri-apps/plugin-fs` on the JS side.**
 
 Create `apps/desktop/src/lib/tauri/fileOps.ts`:
 ```typescript
 import { invoke } from '@tauri-apps/api/core';
-import { open, save } from '@tauri-apps/plugin-dialog';
 
-interface FileData {
+export interface FileData {
   path: string;
   content: string;
   filename: string;
 }
 
+/** Rust shows native dialog, reads file, returns content. */
 export async function openFileDialog(): Promise<FileData | null> {
-  const selected = await open({
-    multiple: false,
-    filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdx'] }],
-  });
+  return invoke<FileData | null>('open_file_dialog');
+}
 
-  if (!selected) return null;
-
-  const path = typeof selected === 'string' ? selected : selected.path;
+/** Open a file by known path (recent files, drag-drop, file association). */
+export async function openFile(path: string): Promise<FileData> {
   return invoke<FileData>('open_file', { path });
 }
 
+/** Save content to a known path (atomic write via Rust). */
 export async function saveFile(path: string, content: string): Promise<void> {
   return invoke('save_file', { path, content });
 }
 
-export async function saveFileAsDialog(content: string): Promise<string | null> {
-  const path = await save({
-    filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }],
-  });
-
-  if (!path) return null;
-
-  await invoke('save_file', { path, content });
-  return path;
+/** Rust shows native save-as dialog, writes file, returns path info. */
+export async function saveFileAsDialog(content: string): Promise<FileData | null> {
+  return invoke<FileData | null>('save_file_as_dialog', { content });
 }
 ```
 
-- [ ] **Step 6: Create file state store**
+- [ ] **Step 6: Create file state store (clean state model)**
+
+The state model must handle two kinds of content changes:
+1. **User edits** (typing in the editor) → mark dirty
+2. **Programmatic loads** (opening a file) → do NOT mark dirty
+
+The clean solution: `Editor.svelte` exposes a `loadFile()` method that replaces the CM6 `EditorState` entirely via `view.setState()`, which does NOT trigger the `updateListener`. User edits go through normal transactions and DO trigger it.
 
 Create `apps/desktop/src/lib/stores/fileState.svelte.ts`:
 ```typescript
@@ -746,7 +811,6 @@ let currentPath = $state<string | null>(null);
 let currentFilename = $state<string>('Untitled');
 let isDirty = $state(false);
 let content = $state('');
-let suppressDirty = $state(false);
 let saveRevision = $state(0);
 let contentRevision = $state(0);
 
@@ -756,30 +820,25 @@ export function getFileState() {
     get filename() { return currentFilename; },
     get isDirty() { return isDirty; },
     get content() { return content; },
-    get isSuppressingDirty() { return suppressDirty; },
 
+    /** Called when a file is opened or saved-as. Does NOT mark dirty. */
     setFile(path: string, filename: string, fileContent: string) {
       currentPath = path;
       currentFilename = filename;
       content = fileContent;
       isDirty = false;
-      // Suppress the next setContent call (triggered by editor.setContent dispatching a change)
-      suppressDirty = true;
       saveRevision++;
       contentRevision = saveRevision;
     },
 
+    /** Called on every user edit (from onDocChange). Marks dirty. */
     setContent(newContent: string) {
       content = newContent;
-      if (suppressDirty) {
-        suppressDirty = false;
-      } else {
-        contentRevision++;
-        isDirty = true;
-      }
+      contentRevision++;
+      isDirty = true;
     },
 
-    /** Only clears dirty if no new edits happened since save started */
+    /** Only clears dirty if no new edits happened since save started. */
     markSaved(atRevision: number) {
       if (contentRevision === atRevision) {
         isDirty = false;
@@ -794,7 +853,6 @@ export function getFileState() {
       currentFilename = 'Untitled';
       content = '';
       isDirty = false;
-      suppressDirty = true; // suppress the editor clear
       saveRevision = 0;
       contentRevision = 0;
     },
@@ -804,14 +862,17 @@ export function getFileState() {
 export const fileState = getFileState();
 ```
 
+**No `suppressDirty` hack.** The dirty-flag issue is solved architecturally in the Editor component (see next step).
+
 - [ ] **Step 7: Wire file operations into Editor and App**
 
-Update `apps/desktop/src/lib/components/Editor.svelte` to accept content as a prop and emit changes:
+Update `apps/desktop/src/lib/components/Editor.svelte`:
 ```svelte
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { createEditor } from '@mdedit/core';
   import type { EditorView } from '@codemirror/view';
+  import { EditorState } from '@codemirror/state';
 
   interface Props {
     content: string;
@@ -838,15 +899,34 @@ Update `apps/desktop/src/lib/components/Editor.svelte` to accept content as a pr
     view?.destroy();
   });
 
-  export function setContent(newContent: string) {
+  /**
+   * Load a file into the editor by replacing the entire EditorState.
+   * This does NOT trigger onDocChange — the state replacement is not a
+   * transaction, so the updateListener never fires. This is the correct
+   * way to load external content without marking the file as dirty.
+   */
+  export function loadFile(newContent: string) {
     if (view) {
-      view.dispatch({
-        changes: {
-          from: 0,
-          to: view.state.doc.length,
-          insert: newContent,
-        },
+      // Create a new state with the same extensions but new content.
+      // view.setState() replaces everything without triggering updateListener.
+      const newState = EditorState.create({
+        doc: newContent,
+        extensions: view.state.toJSON ? [] : [], // Will be refined — see note
       });
+      // NOTE: EditorState.create needs the same extensions as the original.
+      // The clean approach: export the extensions array from createEditor
+      // so it can be reused here. Alternatively, createEditor can expose a
+      // createState(content) helper. Check CM6 docs for view.setState().
+      //
+      // Simplest working approach for now:
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: newContent },
+        // Use an annotation to mark this as a programmatic load
+        annotations: [/* loadFileAnnotation.of(true) */],
+      });
+      // The annotation approach: create a StateAnnotation in @mdedit/core
+      // that the updateListener checks — if present, skip onDocChange.
+      // This is cleaner than suppressDirty and is the idiomatic CM6 pattern.
     }
   }
 
@@ -858,20 +938,40 @@ Update `apps/desktop/src/lib/components/Editor.svelte` to accept content as a pr
 <div class="editor-container" bind:this={container}></div>
 
 <style>
-  .editor-container {
-    flex: 1;
-    overflow: auto;
-  }
-
-  .editor-container :global(.cm-editor) {
-    height: 100%;
-  }
-
-  .editor-container :global(.cm-scroller) {
-    overflow: auto;
-  }
+  .editor-container { flex: 1; overflow: auto; }
+  .editor-container :global(.cm-editor) { height: 100%; }
+  .editor-container :global(.cm-scroller) { overflow: auto; }
 </style>
 ```
+
+**Implementation note:** The cleanest CM6 approach is a transaction annotation. In `@mdedit/core`, create:
+```typescript
+import { Annotation } from '@codemirror/state';
+export const isFileLoad = Annotation.define<boolean>();
+```
+
+Then in `createEditor`, the updateListener checks:
+```typescript
+const updateListener = EditorView.updateListener.of((update) => {
+  if (update.docChanged && onDocChange) {
+    // Skip if this change was a file load, not a user edit
+    const isLoad = update.transactions.some(t => t.annotation(isFileLoad));
+    if (!isLoad) {
+      onDocChange(update.state.doc.toString());
+    }
+  }
+});
+```
+
+And `loadFile()` uses it:
+```typescript
+view.dispatch({
+  changes: { from: 0, to: view.state.doc.length, insert: newContent },
+  annotations: [isFileLoad.of(true)],
+});
+```
+
+This is the idiomatic CM6 pattern — no hacks, no race conditions.
 
 Update `apps/desktop/src/App.svelte`:
 ```svelte
@@ -883,29 +983,61 @@ Update `apps/desktop/src/App.svelte`:
   let editor: Editor;
 
   async function handleOpen() {
+    if (fileState.isDirty && !await confirmDiscard()) return;
     const result = await openFileDialog();
     if (result) {
       fileState.setFile(result.path, result.filename, result.content);
-      editor.setContent(result.content);
+      editor.loadFile(result.content); // Does NOT trigger onDocChange
     }
   }
 
-  async function handleSave() {
-    if (fileState.path) {
-      const rev = fileState.getContentRevision();
-      await saveFile(fileState.path, fileState.content);
-      fileState.markSaved(rev);
-    } else {
-      await handleSaveAs();
+  async function handleSave(): Promise<boolean> {
+    try {
+      if (fileState.path) {
+        const rev = fileState.getContentRevision();
+        await saveFile(fileState.path, fileState.content);
+        fileState.markSaved(rev);
+        return true;
+      } else {
+        return await handleSaveAs();
+      }
+    } catch (e) {
+      console.error('Save failed:', e);
+      // Don't clear dirty — file was NOT saved
+      return false;
     }
   }
 
-  async function handleSaveAs() {
-    const path = await saveFileAsDialog(fileState.content);
-    if (path) {
-      const filename = path.split('/').pop() ?? 'Untitled';
-      fileState.setFile(path, filename, fileState.content);
+  async function handleSaveAs(): Promise<boolean> {
+    try {
+      const result = await saveFileAsDialog(fileState.content);
+      if (result) {
+        fileState.setFile(result.path, result.filename, fileState.content);
+        return true;
+      }
+      return false;
+    } catch (e) {
+      console.error('Save As failed:', e);
+      return false;
     }
+  }
+
+  async function handleNew() {
+    if (fileState.isDirty && !await confirmDiscard()) return;
+    fileState.reset();
+    editor.loadFile('');
+  }
+
+  /** Returns true if it's OK to discard, false if user cancelled. */
+  async function confirmDiscard(): Promise<boolean> {
+    // Use Tauri dialog for a native confirm. Invoke a Rust command
+    // that shows a message dialog: "Save changes to X?"
+    // Options: Save / Don't Save / Cancel
+    // For now, use a simple JS confirm. Replace with native dialog in polish.
+    if (confirm(`Save changes to ${fileState.filename}?`)) {
+      return await handleSave();
+    }
+    return true; // "Don't Save" — discard is OK
   }
 
   function handleContentChange(content: string) {
@@ -924,6 +1056,10 @@ Update `apps/desktop/src/App.svelte`:
       } else {
         handleSave();
       }
+    }
+    if (e.metaKey && e.key === 'n') {
+      e.preventDefault();
+      handleNew();
     }
   }
 </script>
@@ -985,7 +1121,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_save_file_writes_content() {
+    async fn test_save_file_atomic_writes_content() {
         let tmp = NamedTempFile::new().unwrap();
         let path = tmp.path().to_string_lossy().to_string();
 
@@ -995,8 +1131,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_save_leaves_no_temp_files() {
+        let tmp = NamedTempFile::new().unwrap();
+        let path = tmp.path().to_string_lossy().to_string();
+        save_file(path.clone(), "content".to_string()).await.unwrap();
+
+        let dir = PathBuf::from(&path).parent().unwrap().to_path_buf();
+        let temps: Vec<_> = fs::read_dir(&dir).unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().starts_with(".mdedit-save-"))
+            .collect();
+        assert!(temps.is_empty());
+    }
+
+    #[tokio::test]
     async fn test_open_nonexistent_file_returns_error() {
         let result = open_file("/nonexistent/path.md".to_string()).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_open_relative_path_rejected() {
+        let result = open_file("relative/path.md".to_string()).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_save_relative_path_rejected() {
+        let result = save_file("relative/path.md".to_string(), "x".to_string()).await;
         assert!(result.is_err());
     }
 }
@@ -1028,6 +1190,13 @@ git commit -m "feat(app): file open/save with native dialogs and Rust backend"
 ## Task 5: Core — Live Preview Decorations: Headings
 
 **User Story:** As a user, I see headings rendered large and styled when my cursor is away from them, and raw `#` syntax when my cursor is on the line.
+
+**Performance & stability note for all decoration tasks (5-10):**
+The plan creates separate ViewPlugins per decoration type for maintainability. Each walks the syntax tree on doc/selection/viewport changes. For large documents (10k+ lines), this could become a performance concern. Mitigations to apply during implementation:
+- Use `syntaxTree(state).iterate()` with `from`/`to` bounds limited to the visible viewport (`view.viewport`) rather than the entire document.
+- All decoration plugins check `update.viewportChanged || update.docChanged || update.selectionSet` before recomputing — skip if none apply.
+- After all decorations are implemented, test with a 5000+ line markdown file and profile. If slow, consolidate into a single ViewPlugin that computes all decorations in one tree walk.
+- Verify that IME composition (e.g., CJK input) and multi-cursor selections work correctly with live preview active.
 
 **Files:**
 - Create: `packages/core/src/extensions/live-preview.ts`
@@ -3592,73 +3761,113 @@ git commit -m "security: harden filesystem boundary, path validation, and URI po
 
 ---
 
-## Task 25: Stability and Recovery
+## Task 25: Stability, Data Integrity, and Window State
 
-**User Story:** As a user, I never lose work even if the app crashes, my disk is full, or a file is locked by another process.
+**User Story:** As a user, I never lose work. The app warns me before discarding unsaved changes, handles errors gracefully, and remembers my window position.
 
 **Files:**
 - Modify: `apps/desktop/src-tauri/src/commands.rs`
-- Modify: `apps/desktop/src/lib/stores/fileState.svelte.ts`
 - Modify: `apps/desktop/src/App.svelte`
+- Modify: `apps/desktop/src-tauri/src/lib.rs`
+- Create: `apps/desktop/src-tauri/src/window_state.rs`
 
 - [ ] **Step 1: Add Rust tests for error conditions**
 
 Add to `commands.rs` tests:
 ```rust
 #[tokio::test]
-async fn test_save_to_readonly_location_returns_error() {
-    let result = save_file("/readonly/path.md".to_string(), "content".to_string()).await;
-    assert!(result.is_err());
-}
-
-#[tokio::test]
-async fn test_open_binary_file_returns_content() {
-    // Should handle non-UTF-8 gracefully
+async fn test_open_binary_file_returns_error() {
     let tmp = NamedTempFile::new().unwrap();
     let path = tmp.path().to_string_lossy().to_string();
     std::fs::write(&path, b"\xff\xfe invalid utf8").unwrap();
     let result = open_file(path).await;
     assert!(result.is_err()); // read_to_string should fail on invalid UTF-8
 }
-
-#[tokio::test]
-async fn test_save_atomic_leaves_no_temp_on_success() {
-    let tmp = NamedTempFile::new().unwrap();
-    let path = tmp.path().to_string_lossy().to_string();
-    save_file(path.clone(), "content".to_string()).await.unwrap();
-
-    // No .mdedit-save-* temp files should remain
-    let dir = PathBuf::from(&path).parent().unwrap().to_path_buf();
-    let temps: Vec<_> = std::fs::read_dir(&dir).unwrap()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_name().to_string_lossy().starts_with(".mdedit-save-"))
-        .collect();
-    assert!(temps.is_empty());
-}
 ```
 
-- [ ] **Step 2: Add save error handling in the frontend**
+- [ ] **Step 2: Unsaved-change guards on all destructive actions**
 
-In `App.svelte`, wrap save calls with error handling:
+`confirmDiscard()` is already added in Task 4's App.svelte. Ensure it is called before:
+- **Open** (`handleOpen`) — already done in Task 4
+- **New** (`handleNew`) — already done in Task 4
+- **Drag-and-drop** — update Task 17's drop handler to call `confirmDiscard()` before loading
+- **File association open** — update Task 21's event handler to call `confirmDiscard()` before loading
+- **Quit** — add a `beforeunload` handler or Tauri window close event:
+
 ```typescript
-async function handleSave() {
-  if (fileState.path) {
-    try {
-      const rev = fileState.getContentRevision();
-      await saveFile(fileState.path, fileState.content);
-      fileState.markSaved(rev);
-    } catch (e) {
-      console.error('Save failed:', e);
-      // Don't clear dirty flag — file was NOT saved
-      // TODO (Tier 2): Show error toast to user
+import { getCurrentWindow } from '@tauri-apps/api/window';
+
+// In onMount:
+const currentWindow = getCurrentWindow();
+await currentWindow.onCloseRequested(async (event) => {
+  if (fileState.isDirty) {
+    event.preventDefault();
+    const saved = await confirmDiscard();
+    if (saved) {
+      await currentWindow.destroy();
     }
-  } else {
-    await handleSaveAs();
   }
+});
+```
+
+- [ ] **Step 3: Auto-save error handling**
+
+Wrap `scheduleAutoSave` with try/catch so a save failure doesn't clear dirty state:
+```typescript
+function scheduleAutoSave() {
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(async () => {
+    if (fileState.isDirty && fileState.path) {
+      const rev = fileState.getContentRevision();
+      try {
+        await saveFile(fileState.path, fileState.content);
+        fileState.markSaved(rev);
+      } catch (e) {
+        console.error('Auto-save failed:', e);
+        // Dirty flag stays — user will see "Unsaved" and can manually save
+      }
+    }
+  }, 2000);
 }
 ```
 
-Apply the same try/catch pattern to `scheduleAutoSave`.
+- [ ] **Step 4: Window size/position persistence**
+
+Create `apps/desktop/src-tauri/src/window_state.rs`:
+```rust
+use serde::{Deserialize, Serialize};
+use std::fs;
+use tauri::{AppHandle, Manager};
+
+#[derive(Serialize, Deserialize, Default)]
+pub struct WindowState {
+    pub x: Option<f64>,
+    pub y: Option<f64>,
+    pub width: Option<f64>,
+    pub height: Option<f64>,
+}
+
+const STATE_FILE: &str = "window_state.json";
+
+pub fn load(app: &AppHandle) -> WindowState {
+    let path = app.path().app_data_dir().unwrap().join(STATE_FILE);
+    fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
+pub fn save(app: &AppHandle, state: &WindowState) {
+    let dir = app.path().app_data_dir().unwrap();
+    fs::create_dir_all(&dir).ok();
+    let path = dir.join(STATE_FILE);
+    if let Ok(json) = serde_json::to_string(state) {
+        fs::write(path, json).ok();
+    }
+}
+```
+
+In `lib.rs`, restore window state on startup and save on close. Check Tauri 2 docs for the window position/size APIs.
 
 - [ ] **Step 3: Handle corrupted recent files gracefully**
 
