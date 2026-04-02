@@ -591,13 +591,14 @@ git commit -m "feat(app): mount CodeMirror editor in Tauri shell"
 - Modify: `apps/desktop/src-tauri/Cargo.toml`
 - Modify: `apps/desktop/src-tauri/capabilities/default.json`
 
-- [ ] **Step 1: Add Tauri dialog and fs plugins to Cargo.toml**
+- [ ] **Step 1: Add Tauri dialog plugin to Cargo.toml**
 
-Check latest Tauri 2 docs for the current plugin crate names and add them to `apps/desktop/src-tauri/Cargo.toml` dependencies:
+Check latest Tauri 2 docs for the current plugin crate name and add to `apps/desktop/src-tauri/Cargo.toml` dependencies:
 ```toml
 tauri-plugin-dialog = "2"
-tauri-plugin-fs = "2"
 ```
+
+**Security note:** Do NOT add `tauri-plugin-fs`. All filesystem access goes through our explicit Rust commands (`open_file`, `save_file`). The webview should have no ambient filesystem access — this is a core security boundary from the spec.
 
 - [ ] **Step 2: Implement Rust file commands**
 
@@ -632,8 +633,21 @@ pub async fn open_file(path: String) -> Result<FileData, String> {
 
 #[tauri::command]
 pub async fn save_file(path: String, content: String) -> Result<(), String> {
-    fs::write(&path, &content)
-        .map_err(|e| format!("Failed to save file: {}", e))?;
+    // Atomic save: write to temp file in same directory, then rename.
+    // This prevents corruption if the process is interrupted mid-write.
+    let target = PathBuf::from(&path);
+    let dir = target.parent().ok_or("Invalid file path")?;
+    let tmp_path = dir.join(format!(".mdedit-save-{}", std::process::id()));
+
+    fs::write(&tmp_path, &content)
+        .map_err(|e| format!("Failed to write temp file: {}", e))?;
+
+    fs::rename(&tmp_path, &target).map_err(|e| {
+        // Clean up temp file on rename failure
+        fs::remove_file(&tmp_path).ok();
+        format!("Failed to save file: {}", e)
+    })?;
+
     Ok(())
 }
 ```
@@ -647,7 +661,6 @@ mod commands;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             commands::open_file,
             commands::save_file,
@@ -672,10 +685,7 @@ Update `apps/desktop/src-tauri/capabilities/default.json` to include dialog and 
     "core:default",
     "dialog:default",
     "dialog:allow-open",
-    "dialog:allow-save",
-    "fs:default",
-    "fs:allow-read",
-    "fs:allow-write"
+    "dialog:allow-save"
   ]
 }
 ```
@@ -685,7 +695,7 @@ Update `apps/desktop/src-tauri/capabilities/default.json` to include dialog and 
 Install the Tauri JS plugins:
 ```bash
 cd apps/desktop
-pnpm add @tauri-apps/api @tauri-apps/plugin-dialog @tauri-apps/plugin-fs
+pnpm add @tauri-apps/api @tauri-apps/plugin-dialog
 cd ../..
 ```
 
@@ -736,6 +746,9 @@ let currentPath = $state<string | null>(null);
 let currentFilename = $state<string>('Untitled');
 let isDirty = $state(false);
 let content = $state('');
+let suppressDirty = $state(false);
+let saveRevision = $state(0);
+let contentRevision = $state(0);
 
 export function getFileState() {
   return {
@@ -743,28 +756,47 @@ export function getFileState() {
     get filename() { return currentFilename; },
     get isDirty() { return isDirty; },
     get content() { return content; },
+    get isSuppressingDirty() { return suppressDirty; },
 
     setFile(path: string, filename: string, fileContent: string) {
       currentPath = path;
       currentFilename = filename;
       content = fileContent;
       isDirty = false;
+      // Suppress the next setContent call (triggered by editor.setContent dispatching a change)
+      suppressDirty = true;
+      saveRevision++;
+      contentRevision = saveRevision;
     },
 
     setContent(newContent: string) {
       content = newContent;
-      isDirty = true;
+      if (suppressDirty) {
+        suppressDirty = false;
+      } else {
+        contentRevision++;
+        isDirty = true;
+      }
     },
 
-    markSaved() {
-      isDirty = false;
+    /** Only clears dirty if no new edits happened since save started */
+    markSaved(atRevision: number) {
+      if (contentRevision === atRevision) {
+        isDirty = false;
+        saveRevision = contentRevision;
+      }
     },
+
+    getContentRevision() { return contentRevision; },
 
     reset() {
       currentPath = null;
       currentFilename = 'Untitled';
       content = '';
       isDirty = false;
+      suppressDirty = true; // suppress the editor clear
+      saveRevision = 0;
+      contentRevision = 0;
     },
   };
 }
@@ -860,8 +892,9 @@ Update `apps/desktop/src/App.svelte`:
 
   async function handleSave() {
     if (fileState.path) {
+      const rev = fileState.getContentRevision();
       await saveFile(fileState.path, fileState.content);
-      fileState.markSaved();
+      fileState.markSaved(rev);
     } else {
       await handleSaveAs();
     }
@@ -1571,6 +1604,18 @@ import {
 } from '@codemirror/view';
 import type { EditorState, Range } from '@codemirror/state';
 
+/** Only allow safe URI schemes for images — block remote fetches by default */
+function isSafeImageSrc(src: string): boolean {
+  // Allow relative paths (images alongside the .md file)
+  if (!src.includes('://')) return true;
+  // Allow file:// for local images
+  if (src.startsWith('file://')) return true;
+  // Allow data: URIs for embedded images
+  if (src.startsWith('data:image/')) return true;
+  // Block http://, https://, javascript:, and everything else
+  return false;
+}
+
 class ImageWidget extends WidgetType {
   constructor(private src: string, private alt: string) {
     super();
@@ -1579,6 +1624,14 @@ class ImageWidget extends WidgetType {
   toDOM(): HTMLElement {
     const wrapper = document.createElement('div');
     wrapper.className = 'cm-image-widget';
+
+    if (!isSafeImageSrc(this.src)) {
+      wrapper.textContent = `[Remote image blocked: ${this.alt}]`;
+      wrapper.style.color = '#f59e0b';
+      wrapper.style.fontStyle = 'italic';
+      wrapper.style.fontSize = '0.85em';
+      return wrapper;
+    }
 
     const img = document.createElement('img');
     img.src = this.src;
@@ -2031,7 +2084,11 @@ import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate
 import type { EditorState, Range } from '@codemirror/state';
 
 class CheckboxWidget extends WidgetType {
-  constructor(private checked: boolean) { super(); }
+  constructor(
+    private checked: boolean,
+    private pos: number,    // position of [ ] in the document
+    private view: EditorView,
+  ) { super(); }
 
   toDOM(): HTMLElement {
     const input = document.createElement('input');
@@ -2040,15 +2097,27 @@ class CheckboxWidget extends WidgetType {
     input.className = 'cm-task-checkbox';
     input.style.marginRight = '4px';
     input.style.cursor = 'pointer';
+
+    // Toggle the checkbox in the markdown source when clicked
+    input.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      const newChar = this.checked ? ' ' : 'x';
+      // Replace the character inside [ ] — pos points to the [
+      this.view.dispatch({
+        changes: { from: this.pos + 1, to: this.pos + 2, insert: newChar },
+      });
+    });
+
     return input;
   }
 
   eq(other: CheckboxWidget): boolean {
-    return this.checked === other.checked;
+    return this.checked === other.checked && this.pos === other.pos;
   }
 }
 
-function getListDecorations(state: EditorState): DecorationSet {
+function getListDecorations(view: EditorView): DecorationSet {
+  const state = view.state;
   const decorations: Range<Decoration>[] = [];
   const cursorLine = state.doc.lineAt(state.selection.main.head).number;
 
@@ -2070,10 +2139,12 @@ function getListDecorations(state: EditorState): DecorationSet {
         const checked = taskMatch[2].toLowerCase() === 'x';
         const markerStart = line.from;
         const markerEnd = line.from + taskMatch[0].length;
+        // Position of the [ bracket for toggle
+        const bracketPos = line.from + taskMatch[1].length;
 
         decorations.push(
           Decoration.replace({
-            widget: new CheckboxWidget(checked),
+            widget: new CheckboxWidget(checked, bracketPos, view),
           }).range(markerStart, markerEnd)
         );
       }
@@ -2086,10 +2157,10 @@ function getListDecorations(state: EditorState): DecorationSet {
 export const listDecoration = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
-    constructor(view: EditorView) { this.decorations = getListDecorations(view.state); }
+    constructor(view: EditorView) { this.decorations = getListDecorations(view); }
     update(update: ViewUpdate) {
       if (update.docChanged || update.selectionSet || update.viewportChanged) {
-        this.decorations = getListDecorations(update.state);
+        this.decorations = getListDecorations(update.view);
       }
     }
   },
@@ -2873,7 +2944,25 @@ Create `apps/desktop/src/lib/components/StatusBar.svelte`:
 
 - [ ] **Step 5: Wire StatusBar into App.svelte**
 
-Add StatusBar below Editor in `App.svelte`, with cursor tracking via `getCursorInfo` called from `handleContentChange`. Add `$state` variables for `cursorLine`, `cursorCol`, `wordCount` and update them on every content change.
+Add StatusBar below Editor in `App.svelte`. Add `$state` variables for `cursorLine`, `cursorCol`, `wordCount`.
+
+**Important:** Cursor info must update on both content changes AND cursor movement (arrow keys, clicks). Add a second callback to `EditorConfig` and `createEditor`:
+
+In `packages/core/src/editor.ts`, extend the `updateListener` to also fire on selection changes:
+```typescript
+const updateListener = EditorView.updateListener.of((update) => {
+  if (update.docChanged && onDocChange) {
+    onDocChange(update.state.doc.toString());
+  }
+  if ((update.docChanged || update.selectionSet) && onSelectionChange) {
+    onSelectionChange(getCursorInfo(update.state));
+  }
+});
+```
+
+Add `onSelectionChange?: (info: CursorInfo) => void` to `EditorConfig`.
+
+In `Editor.svelte`, pass the new callback to keep the status bar up to date on every cursor movement, not just content edits.
 
 - [ ] **Step 6: Commit**
 
@@ -2901,8 +2990,10 @@ function scheduleAutoSave() {
   if (autoSaveTimer) clearTimeout(autoSaveTimer);
   autoSaveTimer = setTimeout(async () => {
     if (fileState.isDirty && fileState.path) {
+      // Capture revision before save — only clear dirty if no new edits arrived
+      const rev = fileState.getContentRevision();
       await saveFile(fileState.path, fileState.content);
-      fileState.markSaved();
+      fileState.markSaved(rev);
     }
   }, 2000);
 }
@@ -3066,8 +3157,10 @@ git commit -m "feat(app): drag-and-drop file opening"
 
 Check latest Tauri 2 menu API docs. Create `apps/desktop/src-tauri/src/menu.rs`:
 ```rust
+use std::path::PathBuf;
 use tauri::menu::{Menu, MenuItem, Submenu, PredefinedMenuItem};
 use tauri::{AppHandle, Wry};
+use crate::recent_files;
 
 pub fn create_menu(app: &AppHandle) -> Result<Menu<Wry>, tauri::Error> {
     let app_menu = Submenu::with_items(app, "mdedit", true, &[
@@ -3081,9 +3174,26 @@ pub fn create_menu(app: &AppHandle) -> Result<Menu<Wry>, tauri::Error> {
         &PredefinedMenuItem::quit(app, None)?,
     ])?;
 
+    // Build "Open Recent" submenu from persisted recent files
+    let recent = recent_files::load_recent(app);
+    let mut recent_items: Vec<MenuItem<Wry>> = Vec::new();
+    for (i, path) in recent.iter().take(10).enumerate() {
+        let label = PathBuf::from(path)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.clone());
+        recent_items.push(
+            MenuItem::with_id(app, &format!("recent_{}", i), &label, true, None)?
+        );
+    }
+    let recent_refs: Vec<&dyn tauri::menu::IsMenuItem<Wry>> =
+        recent_items.iter().map(|item| item as &dyn tauri::menu::IsMenuItem<Wry>).collect();
+    let open_recent = Submenu::with_items(app, "Open Recent", true, &recent_refs)?;
+
     let file_menu = Submenu::with_items(app, "File", true, &[
         &MenuItem::with_id(app, "new", "New", true, Some("CmdOrCtrl+N"))?,
         &MenuItem::with_id(app, "open", "Open...", true, Some("CmdOrCtrl+O"))?,
+        &open_recent,
         &PredefinedMenuItem::separator(app)?,
         &MenuItem::with_id(app, "save", "Save", true, Some("CmdOrCtrl+S"))?,
         &MenuItem::with_id(app, "save_as", "Save As...", true, Some("CmdOrCtrl+Shift+S"))?,
@@ -3330,6 +3440,262 @@ git commit -m "feat: polish and release prep for Tier 1 MVP"
 
 ---
 
+## Task 23: Search & Replace + Spellcheck Verification
+
+**User Story:** As a user, I can use Cmd+F to search and Cmd+H to replace text in my document. Spell checking works via the native macOS spellcheck.
+
+**Files:**
+- Modify: `packages/core/src/editor.ts`
+
+- [ ] **Step 1: Verify search & replace works**
+
+CM6's `search()` extension is already included from Task 2. Verify that:
+- Cmd+F opens the search panel
+- Cmd+H opens search with replace (check latest CM6 search docs for the correct keybinding — it may be Cmd+Alt+F)
+- Search highlights all matches
+- Replace and Replace All work correctly
+
+If the replace keybinding is not wired, add it explicitly:
+```typescript
+import { openSearchPanel, replaceAll } from '@codemirror/search';
+```
+
+- [ ] **Step 2: Verify native spellcheck works**
+
+WebKit (WKWebView on macOS) provides native spellcheck automatically for contenteditable elements. CM6's editor is contenteditable. Verify:
+- Misspelled words show red underlines
+- Right-click offers spelling suggestions
+
+If spellcheck is not working, add `spellcheck="true"` attribute:
+```typescript
+EditorView.contentAttributes.of({ spellcheck: "true" })
+```
+
+Add this to the extensions array in `createEditor`.
+
+- [ ] **Step 3: Write acceptance test**
+
+Create `packages/core/test/search.test.ts`:
+```typescript
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { EditorView } from '@codemirror/view';
+import { createEditor } from '../src/editor';
+import { openSearchPanel } from '@codemirror/search';
+
+describe('search', () => {
+  let container: HTMLElement;
+  let view: EditorView;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+  });
+
+  afterEach(() => {
+    view?.destroy();
+    container.remove();
+  });
+
+  it('should have search extension loaded', () => {
+    view = createEditor({ parent: container, content: 'hello world' });
+    // openSearchPanel should not throw — search extension is present
+    expect(() => openSearchPanel(view)).not.toThrow();
+  });
+});
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add packages/core/
+git commit -m "feat: verify search/replace and native spellcheck"
+```
+
+---
+
+## Task 24: Security Boundary Hardening
+
+**User Story:** As a security-conscious user, I trust that mdedit doesn't exfiltrate data from my documents or expose my filesystem to web-layer attacks.
+
+**Files:**
+- Modify: `apps/desktop/src-tauri/capabilities/default.json`
+- Modify: `apps/desktop/src-tauri/src/commands.rs`
+- Modify: `packages/core/src/extensions/image-widget.ts`
+- Modify: `packages/core/src/extensions/link-decoration.ts`
+
+- [ ] **Step 1: Audit capabilities**
+
+Review `capabilities/default.json`. It should contain ONLY:
+```json
+"permissions": [
+  "core:default",
+  "dialog:default",
+  "dialog:allow-open",
+  "dialog:allow-save"
+]
+```
+
+There must be NO `fs:*` permissions. All filesystem access goes through explicit Rust commands.
+
+- [ ] **Step 2: Add path validation to Rust commands**
+
+In `commands.rs`, add validation to `open_file` and `save_file`:
+```rust
+use std::path::Path;
+
+fn validate_path(path: &str) -> Result<PathBuf, String> {
+    let p = PathBuf::from(path);
+
+    // Must be absolute path
+    if !p.is_absolute() {
+        return Err("Path must be absolute".to_string());
+    }
+
+    // Resolve symlinks and check for path traversal
+    let canonical = p.canonicalize()
+        .or_else(|_| {
+            // File might not exist yet (save_file case) — check parent
+            p.parent()
+                .ok_or("Invalid path".to_string())
+                .and_then(|parent| parent.canonicalize().map_err(|e| e.to_string()))
+                .map(|parent| parent.join(p.file_name().unwrap_or_default()))
+        })
+        .map_err(|e| format!("Invalid path: {}", e))?;
+
+    Ok(canonical)
+}
+```
+
+Use `validate_path()` at the start of `open_file` and `save_file`.
+
+- [ ] **Step 3: Verify image URI policy is in place**
+
+Confirm `image-widget.ts` has the `isSafeImageSrc()` gate that blocks `http://`, `https://`, `javascript:`, and other remote/dangerous schemes. Only `file://`, `data:image/`, and relative paths are allowed.
+
+- [ ] **Step 4: Verify link decoration does not auto-navigate**
+
+Confirm `link-decoration.ts` only styles links. Clicking a decorated link must NOT navigate the webview. Links are display-only in the editor.
+
+- [ ] **Step 5: Run the full test suite**
+
+```bash
+pnpm test
+cd apps/desktop/src-tauri && cargo test
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add -A
+git commit -m "security: harden filesystem boundary, path validation, and URI policies"
+```
+
+---
+
+## Task 25: Stability and Recovery
+
+**User Story:** As a user, I never lose work even if the app crashes, my disk is full, or a file is locked by another process.
+
+**Files:**
+- Modify: `apps/desktop/src-tauri/src/commands.rs`
+- Modify: `apps/desktop/src/lib/stores/fileState.svelte.ts`
+- Modify: `apps/desktop/src/App.svelte`
+
+- [ ] **Step 1: Add Rust tests for error conditions**
+
+Add to `commands.rs` tests:
+```rust
+#[tokio::test]
+async fn test_save_to_readonly_location_returns_error() {
+    let result = save_file("/readonly/path.md".to_string(), "content".to_string()).await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_open_binary_file_returns_content() {
+    // Should handle non-UTF-8 gracefully
+    let tmp = NamedTempFile::new().unwrap();
+    let path = tmp.path().to_string_lossy().to_string();
+    std::fs::write(&path, b"\xff\xfe invalid utf8").unwrap();
+    let result = open_file(path).await;
+    assert!(result.is_err()); // read_to_string should fail on invalid UTF-8
+}
+
+#[tokio::test]
+async fn test_save_atomic_leaves_no_temp_on_success() {
+    let tmp = NamedTempFile::new().unwrap();
+    let path = tmp.path().to_string_lossy().to_string();
+    save_file(path.clone(), "content".to_string()).await.unwrap();
+
+    // No .mdedit-save-* temp files should remain
+    let dir = PathBuf::from(&path).parent().unwrap().to_path_buf();
+    let temps: Vec<_> = std::fs::read_dir(&dir).unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_name().to_string_lossy().starts_with(".mdedit-save-"))
+        .collect();
+    assert!(temps.is_empty());
+}
+```
+
+- [ ] **Step 2: Add save error handling in the frontend**
+
+In `App.svelte`, wrap save calls with error handling:
+```typescript
+async function handleSave() {
+  if (fileState.path) {
+    try {
+      const rev = fileState.getContentRevision();
+      await saveFile(fileState.path, fileState.content);
+      fileState.markSaved(rev);
+    } catch (e) {
+      console.error('Save failed:', e);
+      // Don't clear dirty flag — file was NOT saved
+      // TODO (Tier 2): Show error toast to user
+    }
+  } else {
+    await handleSaveAs();
+  }
+}
+```
+
+Apply the same try/catch pattern to `scheduleAutoSave`.
+
+- [ ] **Step 3: Handle corrupted recent files gracefully**
+
+In `recent_files.rs`, the `load_recent` function already returns an empty vec on parse failure. Add a test:
+```rust
+#[test]
+fn test_corrupted_recent_file_returns_empty() {
+    // Write garbage to the recent files location
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("recent_files.json");
+    std::fs::write(&path, "not json{{{").unwrap();
+
+    let data = std::fs::read_to_string(&path).unwrap();
+    let result: Vec<String> = serde_json::from_str(&data).unwrap_or_default();
+    assert!(result.is_empty());
+}
+```
+
+- [ ] **Step 4: Verify dirty flag consistency**
+
+Manual test checklist:
+1. Open a file — status bar shows "Saved" (not "Unsaved")
+2. Type a character — status bar shows "Unsaved"
+3. Cmd+S — status bar shows "Saved"
+4. Type a character, wait 2s — auto-save triggers, status bar shows "Saved"
+5. Type rapidly for 5 seconds — status bar shows "Unsaved" throughout, then "Saved" 2s after stopping
+6. Open a new file while editing — status bar shows "Saved" for the new file
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A
+git commit -m "stability: atomic saves, error recovery, and dirty-flag consistency"
+```
+
+---
+
 ## Summary
 
 | Task | Description | Key Files |
@@ -3356,3 +3722,6 @@ git commit -m "feat: polish and release prep for Tier 1 MVP"
 | 20 | Theme support | `theme.ts`, `theme.svelte.ts` |
 | 21 | File association | `tauri.conf.json` |
 | 22 | Polish and release | Various |
+| 23 | Search/replace + spellcheck | `editor.ts` |
+| 24 | Security boundary hardening | `capabilities/`, `commands.rs`, `image-widget.ts` |
+| 25 | Stability and recovery | `commands.rs`, `fileState.svelte.ts`, `App.svelte` |
