@@ -6,6 +6,7 @@
   import { fileState } from '$lib/stores/fileState.svelte';
   import { openFile, openFileDialog, saveFile, saveFileAsDialog, addToRecent } from '$lib/tauri/fileOps';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import { listen } from '@tauri-apps/api/event';
   import type { CursorInfo } from '@mdedit/core';
 
@@ -115,6 +116,12 @@
       handleNew();
     }
   }
+
+  $effect(() => {
+    const dot = fileState.isDirty ? '\u25CF ' : '';
+    const name = fileState.filename ?? 'Untitled';
+    getCurrentWindow().setTitle(`${dot}${name} \u2014 mdedit`);
+  });
 
   let unlistenDragDrop: (() => void) | null = null;
   let unlistenMenu: (() => void) | null = null;
