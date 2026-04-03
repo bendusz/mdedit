@@ -27,8 +27,13 @@ The Rust backend owns all filesystem access and native dialogs. The webview has 
 pnpm dev              # Run Tauri desktop app in dev mode (Vite + Rust backend)
 pnpm build            # Build core lib, then Tauri desktop bundle
 pnpm test             # Run core library tests (Vitest)
-pnpm core:test        # Same as above
 pnpm core:dev         # Watch-build core library
+
+# Single test file
+pnpm --filter @mdedit/core test -- test/commands.test.ts
+
+# Watch mode (re-runs on changes)
+pnpm --filter @mdedit/core test:watch
 
 # Rust tests (from apps/desktop/src-tauri/)
 cargo test            # Run Rust unit tests for file commands
@@ -57,6 +62,14 @@ cd apps/desktop && pnpm check
 - **SvelteKit routing** — Main page is `src/routes/+page.svelte`, not `App.svelte`. Layout at `+layout.svelte` uses Snippet pattern: `{@render children()}`.
 - **Line ending preservation** — `detectLineSeparator()` detects CRLF/LF on open; `contentForSave()` restores original line endings before writing.
 - **Check latest docs** — Before implementing any feature, search the web for current Tauri 2, CodeMirror 6, Svelte 5, and Lezer documentation. APIs evolve between versions.
+
+## Core Public API (`@mdedit/core`)
+
+Editor: `createEditor`, `loadEditorContent`, `setEditorTheme`, `isFileLoad`, `detectLineSeparator`
+Decorations: `livePreview` (aggregates all decoration extensions)
+Toolbar: `toggleBold`, `toggleItalic`, `toggleStrikethrough`, `insertLink`, `insertImage`, `setHeading`, `toggleList`, `toggleTaskList`, `insertCodeBlock`, `insertHorizontalRule`, `insertTable`
+Other: `markdownKeybindings`, `getCursorInfo`, `lightTheme`, `darkTheme`
+Types: `EditorConfig`, `EditorView`, `CursorInfo`, `LineSeparator`
 
 ## CM6 Gotchas
 
