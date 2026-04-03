@@ -77,6 +77,7 @@ export function createEditor(config: EditorConfig): EditorView {
       themeCompartment.of(dark ? darkTheme : lightTheme),
       updateListener,
       EditorView.lineWrapping,
+      EditorView.contentAttributes.of({ spellcheck: 'true' }),
     ],
   });
 
