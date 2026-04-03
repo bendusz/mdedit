@@ -20,13 +20,23 @@ function wrapSelection(
     const preceding = docText.slice(Math.max(0, from - before.length), from);
     const following = docText.slice(to, to + after.length);
     if (preceding === before && following === after) {
-      view.dispatch({
-        changes: [
-          { from: from - before.length, to: from, insert: '' },
-          { from: to, to: to + after.length, insert: '' },
-        ],
-      });
-      return;
+      // Guard against false matches: for `*` (italic), don't unwrap if the
+      // surrounding chars are actually `**` (bold). Check the char just outside.
+      const outerBefore = from - before.length - 1;
+      const outerAfter = to + after.length;
+      const markerChar = before[0];
+      const isLongerMarker =
+        (outerBefore >= 0 && docText[outerBefore] === markerChar) ||
+        (outerAfter < docText.length && docText[outerAfter] === markerChar);
+      if (!isLongerMarker) {
+        view.dispatch({
+          changes: [
+            { from: from - before.length, to: from, insert: '' },
+            { from: to, to: to + after.length, insert: '' },
+          ],
+        });
+        return;
+      }
     }
     // Wrap
     view.dispatch({
@@ -167,10 +177,12 @@ export function toggleTaskList(view: EditorView) {
   const line = view.state.doc.lineAt(from);
   const lineText = line.text;
 
-  if (lineText.startsWith('- [ ] ')) {
-    // Remove task list prefix
+  // Match both unchecked and checked task items
+  const taskMatch = lineText.match(/^- \[[ xX]\] /);
+  if (taskMatch) {
+    // Remove task list prefix (handles - [ ] , - [x] , - [X] )
     view.dispatch({
-      changes: { from: line.from, to: line.from + 6, insert: '' },
+      changes: { from: line.from, to: line.from + taskMatch[0].length, insert: '' },
     });
   } else if (lineText.startsWith('- ')) {
     // Upgrade plain list to task list: replace "- " with "- [ ] "
