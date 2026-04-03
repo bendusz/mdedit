@@ -5,13 +5,24 @@ import {
   EditorView,
   WidgetType,
 } from '@codemirror/view';
-import { type Extension, type Range, StateField } from '@codemirror/state';
+import { Facet, type Extension, type Range, StateField } from '@codemirror/state';
 import type { EditorState } from '@codemirror/state';
+
+/**
+ * Facet to provide the base directory for resolving relative image paths.
+ * Set this to the directory containing the .md file (e.g., "/Users/ben/docs/").
+ * Without it, relative image paths won't resolve in the Tauri webview.
+ */
+export const imageBasePath = Facet.define<string, string>({
+  combine: (values) => values[values.length - 1] ?? '',
+});
 
 /** Only allow safe URI schemes for images — block remote fetches by default. */
 export function isSafeImageSrc(src: string): boolean {
   // Block javascript: URIs
   if (src.startsWith('javascript:')) return false;
+  // Block protocol-relative URLs (//example.com/img.png)
+  if (src.startsWith('//')) return false;
   // Allow data: URIs only for images
   if (src.startsWith('data:')) return src.startsWith('data:image/');
   // Allow file:// for local images
@@ -26,8 +37,23 @@ class ImageWidget extends WidgetType {
   constructor(
     private src: string,
     private alt: string,
+    private basePath: string,
   ) {
     super();
+  }
+
+  /** Resolve a relative image src against the basePath. */
+  private resolvedSrc(): string {
+    // Already absolute or has a scheme — use as-is
+    if (this.src.includes('://') || this.src.startsWith('data:') || this.src.startsWith('/')) {
+      return this.src;
+    }
+    // Relative path — resolve against basePath if available
+    if (this.basePath) {
+      const base = this.basePath.endsWith('/') ? this.basePath : this.basePath + '/';
+      return base + this.src;
+    }
+    return this.src;
   }
 
   toDOM(): HTMLElement {
@@ -43,7 +69,7 @@ class ImageWidget extends WidgetType {
     }
 
     const img = document.createElement('img');
-    img.src = this.src;
+    img.src = this.resolvedSrc();
     img.alt = this.alt;
     img.style.maxWidth = '100%';
     img.style.borderRadius = '4px';
@@ -61,7 +87,7 @@ class ImageWidget extends WidgetType {
   }
 
   eq(other: ImageWidget): boolean {
-    return this.src === other.src && this.alt === other.alt;
+    return this.src === other.src && this.alt === other.alt && this.basePath === other.basePath;
   }
 }
 
@@ -89,23 +115,27 @@ function buildImageDecorations(state: EditorState): DecorationSet {
         if (cursorLines.has(l)) return false;
       }
 
-      // Extract the full text of the image node
-      const text = state.doc.sliceString(node.from, node.to);
+      // Use Lezer's parsed tree nodes instead of regex re-parsing
+      const urlNode = node.node.getChild('URL');
+      if (!urlNode) return false;
 
-      // Extract alt text and src from the image syntax
-      const altMatch = text.match(/!\[([^\]]*)\]/);
-      const srcMatch = text.match(/\]\(([^)]+)\)/);
+      const src = state.doc.sliceString(urlNode.from, urlNode.to);
+      const basePath = state.facet(imageBasePath);
 
-      if (!srcMatch) return false;
-
-      const alt = altMatch ? altMatch[1] : '';
-      const src = srcMatch[1];
+      // Extract alt text from between ![...] — use the text between first [ and first ]
+      const altMarkNode = node.node.getChild('LinkMark');
+      let alt = '';
+      if (altMarkNode) {
+        const text = state.doc.sliceString(node.from, node.to);
+        const altMatch = text.match(/!\[([^\]]*)\]/);
+        if (altMatch) alt = altMatch[1];
+      }
 
       // Place widget decoration at the end of the line, as a block widget
       const line = state.doc.lineAt(node.to);
       decorations.push(
         Decoration.widget({
-          widget: new ImageWidget(src, alt),
+          widget: new ImageWidget(src, alt, basePath),
           block: true,
           side: 1,
         }).range(line.to),
