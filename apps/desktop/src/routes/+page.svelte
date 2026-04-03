@@ -2,10 +2,15 @@
   import { onMount, onDestroy } from 'svelte';
   import Editor from '$lib/components/Editor.svelte';
   import Toolbar from '$lib/components/Toolbar.svelte';
+  import StatusBar from '$lib/components/StatusBar.svelte';
   import { fileState } from '$lib/stores/fileState.svelte';
   import { openFileDialog, saveFile, saveFileAsDialog } from '$lib/tauri/fileOps';
+  import type { CursorInfo } from '@mdedit/core';
 
   let editor: Editor;
+  let cursorLine = $state(1);
+  let cursorCol = $state(1);
+  let wordCount = $state(0);
 
   function getEditorView() {
     return editor?.getView();
@@ -13,6 +18,12 @@
 
   function onDocChange(content: string) {
     fileState.setContent(content);
+  }
+
+  function onSelectionChange(info: CursorInfo) {
+    cursorLine = info.line;
+    cursorCol = info.col;
+    wordCount = info.wordCount;
   }
 
   async function handleOpen() {
@@ -95,7 +106,8 @@
 
 <main class="app">
   <Toolbar {getEditorView} />
-  <Editor bind:this={editor} {onDocChange} />
+  <Editor bind:this={editor} {onDocChange} {onSelectionChange} />
+  <StatusBar line={cursorLine} col={cursorCol} {wordCount} isDirty={fileState.isDirty} />
 </main>
 
 <style>

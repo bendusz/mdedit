@@ -11,6 +11,7 @@ import {
 import { search, searchKeymap } from '@codemirror/search';
 import { livePreview } from './extensions/live-preview';
 import { markdownKeybindings } from './toolbar/keybindings';
+import { getCursorInfo, type CursorInfo } from './observers';
 
 export type LineSeparator = '\n' | '\r\n';
 
@@ -18,6 +19,7 @@ export interface EditorConfig {
   parent: HTMLElement;
   content: string;
   onDocChange?: (content: string) => void;
+  onSelectionChange?: (info: CursorInfo) => void;
 }
 
 /** Annotation to mark transactions that load file content (not user edits). */
@@ -37,7 +39,7 @@ export function detectLineSeparator(content: string): LineSeparator {
 }
 
 export function createEditor(config: EditorConfig): EditorView {
-  const { parent, content, onDocChange } = config;
+  const { parent, content, onDocChange, onSelectionChange } = config;
 
   const updateListener = EditorView.updateListener.of((update) => {
     if (update.docChanged && onDocChange) {
@@ -45,6 +47,9 @@ export function createEditor(config: EditorConfig): EditorView {
       if (!isLoad) {
         onDocChange(update.state.doc.toString());
       }
+    }
+    if ((update.docChanged || update.selectionSet) && onSelectionChange) {
+      onSelectionChange(getCursorInfo(update.state));
     }
   });
 

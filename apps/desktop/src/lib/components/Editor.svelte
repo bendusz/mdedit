@@ -1,8 +1,11 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { createEditor, loadEditorContent } from '@mdedit/core';
+  import { createEditor, loadEditorContent, type CursorInfo } from '@mdedit/core';
 
-  let { onDocChange }: { onDocChange?: (content: string) => void } = $props();
+  let { onDocChange, onSelectionChange }: {
+    onDocChange?: (content: string) => void;
+    onSelectionChange?: (info: CursorInfo) => void;
+  } = $props();
 
   let container: HTMLElement;
   let view: ReturnType<typeof createEditor>;
@@ -12,6 +15,7 @@
       parent: container,
       content: '# Welcome to mdedit\n\nStart typing your markdown here.',
       onDocChange,
+      onSelectionChange,
     });
     view.focus();
   });
