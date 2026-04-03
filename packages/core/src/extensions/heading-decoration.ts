@@ -15,6 +15,8 @@ const headingClasses: Record<string, string> = {
   ATXHeading4: 'cm-heading-4',
   ATXHeading5: 'cm-heading-5',
   ATXHeading6: 'cm-heading-6',
+  SetextHeading1: 'cm-heading-1',
+  SetextHeading2: 'cm-heading-2',
 };
 
 function buildDecorations(state: EditorState): DecorationSet {
@@ -40,25 +42,48 @@ function buildDecorations(state: EditorState): DecorationSet {
           Decoration.line({ class: cls }).range(line.from),
         );
 
-        // If cursor is NOT on this heading line, hide the HeaderMark (# symbols)
+        // If cursor is NOT on this heading line, hide markers
         if (!cursorLines.has(line.number)) {
-          // Walk children to find HeaderMark nodes
-          const cursor = node.node.cursor();
-          if (cursor.firstChild()) {
-            do {
-              if (cursor.name === 'HeaderMark') {
-                // Replace the HeaderMark and trailing space with nothing
-                const markEnd = cursor.to;
-                // Include the space after the # marks if present
-                const afterMark =
-                  markEnd < line.to && state.doc.sliceString(markEnd, markEnd + 1) === ' '
-                    ? markEnd + 1
-                    : markEnd;
-                decorations.push(
-                  Decoration.replace({}).range(cursor.from, afterMark),
-                );
-              }
-            } while (cursor.nextSibling());
+          const isSetext = node.name.startsWith('Setext');
+
+          if (isSetext) {
+            // For setext headings, hide the underline row (=== or ---)
+            const endLine = state.doc.lineAt(node.to);
+            if (endLine.number !== line.number) {
+              decorations.push(
+                Decoration.replace({}).range(endLine.from - 1, endLine.to),
+              );
+            }
+          } else {
+            // For ATX headings, hide all HeaderMark nodes and surrounding whitespace
+            const cursor = node.node.cursor();
+            if (cursor.firstChild()) {
+              let isFirst = true;
+              do {
+                if (cursor.name === 'HeaderMark') {
+                  if (isFirst) {
+                    // Leading marks: hide from mark start through all trailing spaces
+                    let hideEnd = cursor.to;
+                    while (hideEnd < line.to && state.doc.sliceString(hideEnd, hideEnd + 1) === ' ') {
+                      hideEnd++;
+                    }
+                    decorations.push(
+                      Decoration.replace({}).range(cursor.from, hideEnd),
+                    );
+                    isFirst = false;
+                  } else {
+                    // Closing marks (e.g. `# Title ##`): hide from preceding space through end
+                    let hideStart = cursor.from;
+                    while (hideStart > line.from && state.doc.sliceString(hideStart - 1, hideStart) === ' ') {
+                      hideStart--;
+                    }
+                    decorations.push(
+                      Decoration.replace({}).range(hideStart, cursor.to),
+                    );
+                  }
+                }
+              } while (cursor.nextSibling());
+            }
           }
         }
       }
