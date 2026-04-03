@@ -9,7 +9,8 @@ import {
   bracketMatching,
 } from '@codemirror/language';
 import { search, searchKeymap } from '@codemirror/search';
-import { livePreview, FrontmatterExtension } from './extensions/live-preview';
+import { autocompletion } from '@codemirror/autocomplete';
+import { livePreview, FrontmatterExtension, emojiAutocomplete } from './extensions/live-preview';
 import { imageBasePath } from './extensions/image-widget';
 import { markdownKeybindings } from './toolbar/keybindings';
 import { commandPaletteExtension } from './command-palette/palette-extension';
@@ -126,6 +127,8 @@ export function createEditor(config: EditorConfig): EditorView {
       keymap.of(markdownKeybindings),
       keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
       ...livePreview(),
+      autocompletion({ activateOnTyping: true }),
+      emojiAutocomplete,
       ...commandPaletteExtension(),
       themeCompartment.of(dark ? darkTheme : lightTheme),
       mermaidDarkModeCompartment.of(mermaidDarkMode.of(dark ?? false)),

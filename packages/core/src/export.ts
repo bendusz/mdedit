@@ -1,5 +1,6 @@
 import { Marked } from 'marked';
 import markedFootnote from 'marked-footnote';
+import { replaceEmojiShortcodes } from './extensions/emoji';
 
 const htmlTemplate = (body: string): string => `<!DOCTYPE html>
 <html lang="en">
@@ -255,6 +256,7 @@ function createMarkedInstance(): Marked {
  */
 export function markdownToHtml(markdown: string): string {
   const instance = createMarkedInstance();
-  const body = instance.parse(markdown, { async: false });
+  const processed = replaceEmojiShortcodes(markdown);
+  const body = instance.parse(processed, { async: false });
   return htmlTemplate(body);
 }

@@ -11,6 +11,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "^6.20.1",
     "@codemirror/commands": "^6",
     "@codemirror/lang-markdown": "^6",
     "@codemirror/language": "^6",
