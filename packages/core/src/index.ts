@@ -8,3 +8,17 @@ export {
 } from './editor';
 
 export { livePreview } from './extensions/live-preview';
+
+export {
+  toggleBold,
+  toggleItalic,
+  toggleStrikethrough,
+  insertLink,
+  insertImage,
+  setHeading,
+  toggleList,
+  toggleTaskList,
+  insertCodeBlock,
+  insertHorizontalRule,
+  insertTable,
+} from './toolbar/commands';

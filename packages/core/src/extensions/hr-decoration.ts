@@ -49,8 +49,10 @@ function buildDecorations(state: EditorState): DecorationSet {
         Decoration.line({ class: 'cm-hr' }).range(line.from),
       );
 
-      // When cursor is NOT on this line, replace the marker with an HR widget
-      if (!cursorLines.has(line.number)) {
+      // When cursor is NOT on this line, replace the marker with an HR widget.
+      // Guard: only replace if the range stays within the same line (from < to),
+      // avoiding a CM6 restriction on cross-line replace decorations from plugins.
+      if (!cursorLines.has(line.number) && line.from < line.to) {
         replaceDecorations.push(
           Decoration.replace({
             widget: new HRWidget(),

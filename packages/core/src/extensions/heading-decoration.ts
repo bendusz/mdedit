@@ -49,9 +49,11 @@ function buildDecorations(state: EditorState): DecorationSet {
           if (isSetext) {
             // For setext headings, hide the underline row (=== or ---)
             const endLine = state.doc.lineAt(node.to);
-            if (endLine.number !== line.number) {
+            if (endLine.number !== line.number && endLine.from < endLine.to) {
+              // Replace only the underline content, not the preceding newline,
+              // because CM6 plugins may not replace ranges that span line breaks.
               decorations.push(
-                Decoration.replace({}).range(endLine.from - 1, endLine.to),
+                Decoration.replace({}).range(endLine.from, endLine.to),
               );
             }
           } else {
