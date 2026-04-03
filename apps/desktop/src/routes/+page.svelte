@@ -16,7 +16,7 @@
   } from '$lib/tauri/fileOps';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { listen } from '@tauri-apps/api/event';
-  import { setEditorTheme, type CursorInfo } from '@mdedit/core';
+  import { setEditorTheme, registerPaletteCommands, type CursorInfo, type PaletteCommand } from '@mdedit/core';
 
   let editor: Editor;
   let cursorLine = $state(1);
@@ -231,6 +231,18 @@
 
   onMount(async () => {
     window.addEventListener('keydown', handleKeydown);
+
+    // Register app-level commands in the command palette
+    const view = getEditorView();
+    if (view) {
+      const appCommands: PaletteCommand[] = [
+        { id: 'file-new', label: 'New File', category: 'File', shortcut: '\u2318N', execute: () => { void handleNew(); } },
+        { id: 'file-open', label: 'Open File', category: 'File', shortcut: '\u2318O', execute: () => { void handleOpen(); } },
+        { id: 'file-save', label: 'Save', category: 'File', shortcut: '\u2318S', execute: () => { void handleSave(); } },
+        { id: 'file-save-as', label: 'Save As...', category: 'File', shortcut: '\u2318\u21E7S', execute: () => { void handleSaveAs(); } },
+      ];
+      registerPaletteCommands(view, appCommands);
+    }
 
     unlistenMenu = await listen<string>('menu-event', (event) => {
       switch (event.payload) {

@@ -32,3 +32,11 @@ export {
 } from './toolbar/commands';
 
 export { markdownKeybindings } from './toolbar/keybindings';
+
+export {
+  commandPaletteExtension,
+  showCommandPalette,
+  registerPaletteCommands,
+} from './command-palette/palette-extension';
+
+export { defaultCommands, filterCommands, type PaletteCommand } from './command-palette/commands';
