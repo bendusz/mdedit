@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createEditor, setReadOnly } from '../src/editor';
 import { EditorView } from '@codemirror/view';
-import { EditorState } from '@codemirror/state';
 
 describe('setReadOnly (reading mode)', () => {
   let container: HTMLElement;

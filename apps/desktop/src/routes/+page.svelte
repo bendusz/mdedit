@@ -17,8 +17,7 @@
   } from '$lib/tauri/fileOps';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { listen } from '@tauri-apps/api/event';
-  import { setEditorTheme, setContentWidth, setReadOnly, registerPaletteCommands, getOutline, markdownToHtml, type CursorInfo, type PaletteCommand, type OutlineEntry } from '@mdedit/core';
-  import { EditorView } from '@mdedit/core';
+  import { setEditorTheme, setContentWidth, setReadOnly, registerPaletteCommands, getOutline, markdownToHtml, EditorView, type CursorInfo, type PaletteCommand, type OutlineEntry } from '@mdedit/core';
   import OutlineSidebar from '$lib/components/OutlineSidebar.svelte';
   import { contentWidthState } from '$lib/stores/contentWidth.svelte';
 
@@ -110,18 +109,8 @@
     const view = getEditorView();
     if (!view) return;
 
-    if (!readingMode && fileState.isDirty) {
-      // Auto-save before entering reading mode
-      if (fileState.path) {
-        const rev = fileState.revision;
-        try {
-          await saveCurrentFile(contentForSave());
-          fileState.markSaved(rev);
-        } catch (e) {
-          console.error('Auto-save before reading mode failed:', e);
-          return;
-        }
-      }
+    if (!readingMode && !(await saveCurrentDocumentBeforeSwitch())) {
+      return;
     }
 
     readingMode = !readingMode;

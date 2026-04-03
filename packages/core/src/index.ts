@@ -15,7 +15,7 @@ export { lightTheme, darkTheme } from './theme';
 
 export { getCursorInfo, type CursorInfo } from './observers';
 
-export { type EditorView } from '@codemirror/view';
+export { EditorView } from '@codemirror/view';
 
 export { livePreview, FrontmatterExtension } from './extensions/live-preview';
 
@@ -46,4 +46,3 @@ export { defaultCommands, filterCommands, type PaletteCommand } from './command-
 export { getOutline, type OutlineEntry } from './outline';
 
 export { markdownToHtml } from './export';
-

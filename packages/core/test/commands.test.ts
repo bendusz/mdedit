@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EditorView } from '@codemirror/view';
 import { EditorSelection } from '@codemirror/state';
-import { createEditor } from '../src/editor';
+import { createEditor, setReadOnly } from '../src/editor';
 import {
   toggleBold,
   toggleItalic,
@@ -350,6 +350,35 @@ describe('toolbar commands', () => {
       expect(sel.from).toBe(2);
       expect(sel.to).toBe(8);
       expect(view.state.sliceDoc(sel.from, sel.to)).toBe('Header');
+    });
+  });
+
+  describe('read-only mode', () => {
+    it('should ignore editing commands while the editor is read-only', () => {
+      const commands = [
+        () => toggleBold(view),
+        () => toggleItalic(view),
+        () => toggleStrikethrough(view),
+        () => insertLink(view),
+        () => insertImage(view),
+        () => setHeading(view, 2),
+        () => toggleList(view),
+        () => toggleTaskList(view),
+        () => insertCodeBlock(view),
+        () => insertHorizontalRule(view),
+        () => insertTable(view),
+      ];
+
+      for (const run of commands) {
+        createWithContent('hello', 0);
+        setReadOnly(view, true);
+
+        run();
+
+        expect(docText()).toBe('hello');
+
+        view.destroy();
+      }
     });
   });
 });

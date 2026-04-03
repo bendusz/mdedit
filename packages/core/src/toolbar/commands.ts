@@ -1,5 +1,9 @@
 import { EditorView } from '@codemirror/view';
 
+function canEdit(view: EditorView): boolean {
+  return !view.state.readOnly;
+}
+
 /**
  * Helper: wrap the current selection with `before` and `after` markers.
  * If already wrapped, unwrap. If no selection, insert `before + placeholder + after`
@@ -58,21 +62,25 @@ function wrapSelection(
 
 /** Toggle bold (`**`) around the selection, or insert a bold placeholder. */
 export function toggleBold(view: EditorView) {
+  if (!canEdit(view)) return;
   wrapSelection(view, '**', '**', 'bold');
 }
 
 /** Toggle italic (`*`) around the selection, or insert an italic placeholder. */
 export function toggleItalic(view: EditorView) {
+  if (!canEdit(view)) return;
   wrapSelection(view, '*', '*', 'italic');
 }
 
 /** Toggle strikethrough (`~~`) around the selection, or insert a placeholder. */
 export function toggleStrikethrough(view: EditorView) {
+  if (!canEdit(view)) return;
   wrapSelection(view, '~~', '~~', 'strikethrough');
 }
 
 /** Insert a markdown link. Uses the selection as link text, or inserts a template. */
 export function insertLink(view: EditorView) {
+  if (!canEdit(view)) return;
   const { from, to } = view.state.selection.main;
   const selected = view.state.sliceDoc(from, to);
 
@@ -98,6 +106,7 @@ export function insertLink(view: EditorView) {
 
 /** Insert a markdown image. Uses the selection as alt text, or inserts a template. */
 export function insertImage(view: EditorView) {
+  if (!canEdit(view)) return;
   const { from, to } = view.state.selection.main;
   const selected = view.state.sliceDoc(from, to);
 
@@ -126,6 +135,7 @@ export function insertImage(view: EditorView) {
  * prefix, it is replaced. Level 0 removes the heading entirely.
  */
 export function setHeading(view: EditorView, level: number) {
+  if (!canEdit(view)) return;
   const { from } = view.state.selection.main;
   const line = view.state.doc.lineAt(from);
   const lineText = line.text;
@@ -154,6 +164,7 @@ export function setHeading(view: EditorView, level: number) {
 
 /** Toggle an unordered list (`- `) prefix on the current line. */
 export function toggleList(view: EditorView) {
+  if (!canEdit(view)) return;
   const { from } = view.state.selection.main;
   const line = view.state.doc.lineAt(from);
   const lineText = line.text;
@@ -173,6 +184,7 @@ export function toggleList(view: EditorView) {
 
 /** Toggle a task list (`- [ ] `) prefix on the current line. */
 export function toggleTaskList(view: EditorView) {
+  if (!canEdit(view)) return;
   const { from } = view.state.selection.main;
   const line = view.state.doc.lineAt(from);
   const lineText = line.text;
@@ -199,6 +211,7 @@ export function toggleTaskList(view: EditorView) {
 
 /** Insert a fenced code block at the cursor, or wrap the selection. */
 export function insertCodeBlock(view: EditorView) {
+  if (!canEdit(view)) return;
   const { from, to } = view.state.selection.main;
   const selected = view.state.sliceDoc(from, to);
 
@@ -220,6 +233,7 @@ export function insertCodeBlock(view: EditorView) {
 
 /** Insert a horizontal rule (`---`) on its own line. */
 export function insertHorizontalRule(view: EditorView) {
+  if (!canEdit(view)) return;
   const { from } = view.state.selection.main;
   const line = view.state.doc.lineAt(from);
 
@@ -243,6 +257,7 @@ export function insertHorizontalRule(view: EditorView) {
 
 /** Insert a 3-column markdown table template. */
 export function insertTable(view: EditorView) {
+  if (!canEdit(view)) return;
   const { from } = view.state.selection.main;
 
   const table = [
