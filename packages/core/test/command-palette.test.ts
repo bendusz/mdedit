@@ -227,6 +227,12 @@ describe('command palette', () => {
       expect(input).toBeTruthy();
     });
 
+    it('gives the input an accessible name', () => {
+      showCommandPalette(view);
+      const input = editorRoot().querySelector('.cm-command-palette-input') as HTMLInputElement;
+      expect(input.getAttribute('aria-label')).toBe('Command palette');
+    });
+
     it('shows command results', () => {
       showCommandPalette(view);
       const items = editorRoot().querySelectorAll('.cm-command-palette-item');

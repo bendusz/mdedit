@@ -79,6 +79,7 @@ function createPalettePanel(view: EditorView): Panel {
   input.setAttribute('autocomplete', 'off');
   input.setAttribute('spellcheck', 'false');
   input.setAttribute('role', 'combobox');
+  input.setAttribute('aria-label', 'Command palette');
   input.setAttribute('aria-expanded', 'true');
   input.setAttribute('aria-autocomplete', 'list');
   input.setAttribute('aria-haspopup', 'listbox');
