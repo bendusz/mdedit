@@ -17,7 +17,7 @@
   } from '$lib/tauri/fileOps';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { listen } from '@tauri-apps/api/event';
-  import { setEditorTheme, setContentWidth, registerPaletteCommands, getOutline, markdownToHtml, type CursorInfo, type PaletteCommand, type OutlineEntry } from '@mdedit/core';
+  import { setEditorTheme, setContentWidth, setReadOnly, registerPaletteCommands, getOutline, markdownToHtml, type CursorInfo, type PaletteCommand, type OutlineEntry } from '@mdedit/core';
   import { EditorView } from '@mdedit/core';
   import OutlineSidebar from '$lib/components/OutlineSidebar.svelte';
   import { contentWidthState } from '$lib/stores/contentWidth.svelte';
@@ -27,6 +27,7 @@
   let cursorCol = $state(1);
   let wordCount = $state(0);
   let showOutline = $state(false);
+  let readingMode = $state(false);
   let outlineEntries: OutlineEntry[] = $state([]);
 
   let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -39,7 +40,16 @@
     return filePath.replace(/[\\/][^\\/]*$/, '');
   }
 
+  function exitReadingMode() {
+    if (readingMode) {
+      readingMode = false;
+      const view = getEditorView();
+      if (view) setReadOnly(view, false);
+    }
+  }
+
   function applyLoadedFile(data: FileData) {
+    exitReadingMode();
     fileState.setFile(data.path, data.filename, data.content);
     editor.setFileBasePath(directoryOf(data.path));
     editor.loadFile(data.content);
@@ -94,6 +104,28 @@
     if (showOutline) {
       updateOutline();
     }
+  }
+
+  async function toggleReadingMode() {
+    const view = getEditorView();
+    if (!view) return;
+
+    if (!readingMode && fileState.isDirty) {
+      // Auto-save before entering reading mode
+      if (fileState.path) {
+        const rev = fileState.revision;
+        try {
+          await saveCurrentFile(contentForSave());
+          fileState.markSaved(rev);
+        } catch (e) {
+          console.error('Auto-save before reading mode failed:', e);
+          return;
+        }
+      }
+    }
+
+    readingMode = !readingMode;
+    setReadOnly(view, readingMode);
   }
 
   function onSelectionChange(info: CursorInfo) {
@@ -206,6 +238,7 @@
       return;
     }
 
+    exitReadingMode();
     fileState.reset();
     editor.setFileBasePath('');
     editor.loadFile(WELCOME_CONTENT);
@@ -220,7 +253,10 @@
   function handleKeydown(e: KeyboardEvent) {
     const mod = e.metaKey || e.ctrlKey;
     const key = e.key.toLowerCase();
-    if (mod && e.shiftKey && key === 'e') {
+    if (mod && e.shiftKey && key === 'r') {
+      e.preventDefault();
+      void toggleReadingMode();
+    } else if (mod && e.shiftKey && key === 'e') {
       e.preventDefault();
       void handleExportHtml();
     } else if (mod && e.shiftKey && key === 'o') {
@@ -300,6 +336,7 @@
         { id: 'file-save-as', label: 'Save As...', category: 'File', shortcut: '\u2318\u21E7S', execute: () => { void handleSaveAs(); } },
         { id: 'file-export-html', label: 'Export to HTML', category: 'File', shortcut: '\u2318\u21E7E', execute: () => { void handleExportHtml(); } },
         { id: 'view-toggle-outline', label: 'Toggle Outline', category: 'View', shortcut: '\u2318\u21E7O', execute: () => { toggleOutline(); } },
+        { id: 'view-toggle-reading-mode', label: 'Toggle Reading Mode', category: 'View', shortcut: '\u2318\u21E7R', execute: () => { void toggleReadingMode(); } },
       ];
       registerPaletteCommands(view, appCommands);
       updateOutline();
@@ -365,12 +402,14 @@
 </script>
 
 <main class="app">
-  <Toolbar {getEditorView} />
+  {#if !readingMode}
+    <Toolbar {getEditorView} />
+  {/if}
   <div class="editor-area">
     <Editor bind:this={editor} {onDocChange} {onSelectionChange} />
     <OutlineSidebar entries={outlineEntries} visible={showOutline} onEntryClick={handleOutlineEntryClick} />
   </div>
-  <StatusBar line={cursorLine} col={cursorCol} {wordCount} isDirty={fileState.isDirty} contentWidth={contentWidthState.width} onContentWidthChange={(w) => contentWidthState.setWidth(w)} />
+  <StatusBar line={cursorLine} col={cursorCol} {wordCount} isDirty={fileState.isDirty} {readingMode} contentWidth={contentWidthState.width} onContentWidthChange={(w) => contentWidthState.setWidth(w)} />
 </main>
 
 <style>

@@ -19,6 +19,7 @@ import { lightTheme, darkTheme } from './theme';
 const themeCompartment = new Compartment();
 const imageBasePathCompartment = new Compartment();
 const contentWidthCompartment = new Compartment();
+const readOnlyCompartment = new Compartment();
 
 export type LineSeparator = '\n' | '\r\n';
 
@@ -72,6 +73,19 @@ export function setContentWidth(view: EditorView, width: string) {
   });
 }
 
+/**
+ * Toggle reading mode. When readOnly is true the document cannot be edited,
+ * the cursor is hidden, but scrolling and text selection still work.
+ */
+export function setReadOnly(view: EditorView, readOnly: boolean) {
+  view.dispatch({
+    effects: readOnlyCompartment.reconfigure([
+      EditorState.readOnly.of(readOnly),
+      EditorView.editable.of(!readOnly),
+    ]),
+  });
+}
+
 export function createEditor(config: EditorConfig): EditorView {
   const { parent, content, dark, imageBasePath: basePath = '', contentWidth = '80ch', onDocChange, onSelectionChange } = config;
 
@@ -102,6 +116,10 @@ export function createEditor(config: EditorConfig): EditorView {
       themeCompartment.of(dark ? darkTheme : lightTheme),
       imageBasePathCompartment.of(imageBasePath.of(basePath)),
       contentWidthCompartment.of(contentWidthTheme(contentWidth)),
+      readOnlyCompartment.of([
+        EditorState.readOnly.of(false),
+        EditorView.editable.of(true),
+      ]),
       updateListener,
       EditorView.lineWrapping,
       EditorView.contentAttributes.of({ spellcheck: 'true' }),

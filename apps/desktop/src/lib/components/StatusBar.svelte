@@ -1,11 +1,12 @@
 <script lang="ts">
   import { widthPresets } from '$lib/stores/contentWidth.svelte';
 
-  let { line, col, wordCount, isDirty, contentWidth, onContentWidthChange }: {
+  let { line, col, wordCount, isDirty, readingMode, contentWidth, onContentWidthChange }: {
     line: number;
     col: number;
     wordCount: number;
     isDirty: boolean;
+    readingMode: boolean;
     contentWidth: string;
     onContentWidthChange: (width: string) => void;
   } = $props();
@@ -23,6 +24,10 @@
     <span>{wordCount} words</span>
   </div>
   <div class="status-right">
+    {#if readingMode}
+      <span class="reading-badge">Reading</span>
+      <span class="sep">|</span>
+    {/if}
     <select class="width-select" value={contentWidth} onchange={handleWidthChange}>
       {#each widthPresets as preset}
         <option value={preset.value}>{preset.label}</option>
@@ -62,6 +67,12 @@
 
   .unsaved {
     color: var(--unsaved-fg);
+  }
+
+  .reading-badge {
+    color: var(--reading-badge-fg, #6366f1);
+    font-weight: 600;
+    letter-spacing: 0.02em;
   }
 
   .width-select {

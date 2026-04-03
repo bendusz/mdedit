@@ -6,6 +6,7 @@ export {
   setContentWidth,
   setEditorTheme,
   setImageBasePath,
+  setReadOnly,
   type EditorConfig,
   type LineSeparator,
 } from './editor';
