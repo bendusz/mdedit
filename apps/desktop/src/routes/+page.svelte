@@ -301,7 +301,7 @@
 
 <main class="app">
   <Toolbar {getEditorView} />
-  <Editor bind:this={editor} {onDocChange} {onSelectionChange} contentWidth={contentWidthState.width} />
+  <Editor bind:this={editor} {onDocChange} {onSelectionChange} />
   <StatusBar line={cursorLine} col={cursorCol} {wordCount} isDirty={fileState.isDirty} contentWidth={contentWidthState.width} onContentWidthChange={(w) => contentWidthState.setWidth(w)} />
 </main>
 

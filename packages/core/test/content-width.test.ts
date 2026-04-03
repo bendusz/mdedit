@@ -8,9 +8,10 @@ import { EditorView } from '@codemirror/view';
  * checking the injected style sheet content for the expected CSS value.
  */
 function findMaxWidthInStyles(): string | null {
-  const styles = document.querySelectorAll('style');
-  for (const style of styles) {
-    const text = style.textContent ?? '';
+  const styles = Array.from(document.querySelectorAll('style'));
+  // Scan in reverse so the most recently injected style wins
+  for (let i = styles.length - 1; i >= 0; i--) {
+    const text = styles[i].textContent ?? '';
     const match = text.match(/max-width:\s*([^;}\s]+)/);
     if (match) return match[1];
   }
