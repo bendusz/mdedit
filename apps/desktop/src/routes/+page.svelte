@@ -4,7 +4,8 @@
   import Toolbar from '$lib/components/Toolbar.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
   import { fileState } from '$lib/stores/fileState.svelte';
-  import { openFileDialog, saveFile, saveFileAsDialog, addToRecent } from '$lib/tauri/fileOps';
+  import { openFile, openFileDialog, saveFile, saveFileAsDialog, addToRecent } from '$lib/tauri/fileOps';
+  import { getCurrentWebview } from '@tauri-apps/api/webview';
   import type { CursorInfo } from '@mdedit/core';
 
   let editor: Editor;
@@ -114,13 +115,32 @@
     }
   }
 
-  onMount(() => {
+  let unlistenDragDrop: (() => void) | null = null;
+
+  onMount(async () => {
     window.addEventListener('keydown', handleKeydown);
+
+    unlistenDragDrop = await getCurrentWebview().onDragDropEvent(async (event) => {
+      if (event.payload.type === 'drop') {
+        const paths = event.payload.paths;
+        if (paths.length > 0 && paths[0].match(/\.(md|markdown|mdx)$/i)) {
+          try {
+            const result = await openFile(paths[0]);
+            fileState.setFile(result.path, result.filename, result.content);
+            editor.loadFile(result.content);
+            addToRecent(result.path);
+          } catch (e) {
+            console.error('Failed to open dropped file:', e);
+          }
+        }
+      }
+    });
   });
 
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown);
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
+    unlistenDragDrop?.();
   });
 </script>
 
