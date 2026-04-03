@@ -142,6 +142,18 @@
       if (event.payload.type === 'drop') {
         const paths = event.payload.paths;
         if (paths.length > 0 && paths[0].match(/\.(md|markdown|mdx)$/i)) {
+          // Guard: check for unsaved changes before opening dropped file
+          if (fileState.isDirty) {
+            // For now, auto-save before opening. A proper confirm dialog
+            // will be added in Task 25 (Stability and Recovery).
+            if (fileState.path) {
+              try {
+                const rev = fileState.revision;
+                await saveFile(fileState.path, contentForSave());
+                fileState.markSaved(rev);
+              } catch (_) { /* proceed even if save fails */ }
+            }
+          }
           try {
             const result = await openFile(paths[0]);
             fileState.setFile(result.path, result.filename, result.content);
