@@ -14,7 +14,7 @@ import { imageBasePath } from './extensions/image-widget';
 import { markdownKeybindings } from './toolbar/keybindings';
 import { commandPaletteExtension } from './command-palette/palette-extension';
 import { getCursorInfo, type CursorInfo } from './observers';
-import { lightTheme, darkTheme } from './theme';
+import { lightTheme, darkTheme, getTheme, type ThemeId } from './theme';
 
 const themeCompartment = new Compartment();
 const imageBasePathCompartment = new Compartment();
@@ -49,9 +49,15 @@ export function detectLineSeparator(content: string): LineSeparator {
   return content.includes('\r\n') ? '\r\n' : '\n';
 }
 
-export function setEditorTheme(view: EditorView, dark: boolean) {
+export function setEditorTheme(view: EditorView, themeOrDark: ThemeId | boolean) {
+  let themeId: ThemeId;
+  if (typeof themeOrDark === 'boolean') {
+    themeId = themeOrDark ? 'dark' : 'light';
+  } else {
+    themeId = themeOrDark;
+  }
   view.dispatch({
-    effects: themeCompartment.reconfigure(dark ? darkTheme : lightTheme),
+    effects: themeCompartment.reconfigure(getTheme(themeId)),
   });
 }
 

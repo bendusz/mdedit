@@ -11,7 +11,20 @@ export {
   type LineSeparator,
 } from './editor';
 
-export { lightTheme, darkTheme } from './theme';
+export {
+  lightTheme,
+  darkTheme,
+  solarizedLight,
+  solarizedDark,
+  nordDark,
+  sepiaLight,
+  themes,
+  themeList,
+  getTheme,
+  isThemeDark,
+  type ThemeId,
+  type ThemeInfo,
+} from './theme';
 
 export { getCursorInfo, type CursorInfo } from './observers';
 

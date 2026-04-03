@@ -1,7 +1,8 @@
 <script lang="ts">
   import { widthPresets } from '$lib/stores/contentWidth.svelte';
+  import { themeList, type ThemeId } from '@mdedit/core';
 
-  let { line, col, wordCount, isDirty, readingMode, contentWidth, onContentWidthChange }: {
+  let { line, col, wordCount, isDirty, readingMode, contentWidth, onContentWidthChange, currentTheme, onThemeChange }: {
     line: number;
     col: number;
     wordCount: number;
@@ -9,11 +10,18 @@
     readingMode: boolean;
     contentWidth: string;
     onContentWidthChange: (width: string) => void;
+    currentTheme: ThemeId;
+    onThemeChange: (id: ThemeId) => void;
   } = $props();
 
   function handleWidthChange(e: Event) {
     const select = e.target as HTMLSelectElement;
     onContentWidthChange(select.value);
+  }
+
+  function handleThemeChange(e: Event) {
+    const select = e.target as HTMLSelectElement;
+    onThemeChange(select.value as ThemeId);
   }
 </script>
 
@@ -31,6 +39,12 @@
     <select class="width-select" value={contentWidth} onchange={handleWidthChange}>
       {#each widthPresets as preset}
         <option value={preset.value}>{preset.label}</option>
+      {/each}
+    </select>
+    <span class="sep">|</span>
+    <select class="theme-select" value={currentTheme} onchange={handleThemeChange}>
+      {#each themeList as theme}
+        <option value={theme.id}>{theme.label}</option>
       {/each}
     </select>
     <span class="sep">|</span>
@@ -75,7 +89,8 @@
     letter-spacing: 0.02em;
   }
 
-  .width-select {
+  .width-select,
+  .theme-select {
     background: transparent;
     border: none;
     color: inherit;

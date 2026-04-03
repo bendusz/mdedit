@@ -19,7 +19,7 @@
   import { printHtml } from '$lib/print';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { listen } from '@tauri-apps/api/event';
-  import { setEditorTheme, setContentWidth, setReadOnly, registerPaletteCommands, getOutline, markdownToHtml, EditorView, type CursorInfo, type PaletteCommand, type OutlineEntry } from '@mdedit/core';
+  import { setEditorTheme, setContentWidth, setReadOnly, registerPaletteCommands, getOutline, markdownToHtml, EditorView, themeList, type CursorInfo, type PaletteCommand, type OutlineEntry, type ThemeId } from '@mdedit/core';
   import OutlineSidebar from '$lib/components/OutlineSidebar.svelte';
   import { contentWidthState } from '$lib/stores/contentWidth.svelte';
 
@@ -428,11 +428,14 @@
   });
 
   $effect(() => {
-    const dark = themeState.isDark;
-    document.documentElement.classList.toggle('dark', dark);
+    const id = themeState.themeId;
+    // Only add .dark class for the default dark theme, not named dark themes.
+    // Named dark themes (solarized-dark, nord) use data-theme attribute selectors in CSS.
+    document.documentElement.classList.toggle('dark', id === 'dark');
+    document.documentElement.setAttribute('data-theme', id);
     const view = getEditorView();
     if (view) {
-      setEditorTheme(view, dark);
+      setEditorTheme(view, id);
     }
   });
 
@@ -485,6 +488,12 @@
         { id: 'view-toggle-outline', label: 'Toggle Outline', category: 'View', shortcut: '\u2318\u21E7O', execute: () => { toggleOutline(); } },
         { id: 'view-toggle-reading-mode', label: 'Toggle Reading Mode', category: 'View', shortcut: '\u2318\u21E7R', execute: () => { void toggleReadingMode(); } },
         { id: 'edit-paste-image', label: 'Paste Image', category: 'Edit', execute: () => { void pasteImageFromClipboard(); } },
+        ...themeList.map((t) => ({
+          id: `theme-${t.id}`,
+          label: `Theme: ${t.label}`,
+          category: 'View' as const,
+          execute: () => { themeState.setTheme(t.id); },
+        })),
       ];
       registerPaletteCommands(view, appCommands);
       updateOutline();
@@ -560,7 +569,7 @@
     <Editor bind:this={editor} {onDocChange} {onSelectionChange} />
     <OutlineSidebar entries={outlineEntries} visible={showOutline} onEntryClick={handleOutlineEntryClick} />
   </div>
-  <StatusBar line={cursorLine} col={cursorCol} {wordCount} isDirty={fileState.isDirty} {readingMode} contentWidth={contentWidthState.width} onContentWidthChange={(w) => contentWidthState.setWidth(w)} />
+  <StatusBar line={cursorLine} col={cursorCol} {wordCount} isDirty={fileState.isDirty} {readingMode} contentWidth={contentWidthState.width} onContentWidthChange={(w) => contentWidthState.setWidth(w)} currentTheme={themeState.themeId} onThemeChange={(id: ThemeId) => themeState.setTheme(id)} />
 </main>
 
 <style>
