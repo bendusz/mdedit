@@ -32,6 +32,11 @@ function buildLinkDecorations(state: EditorState): DecorationSet {
         if (cursorLines.has(l)) return false;
       }
 
+      // Only style links that have a real destination URL.
+      // Skip reference-style links [text][ref] and broken/incomplete links.
+      const hasURL = node.node.getChild('URL');
+      if (!hasURL) return false;
+
       // Walk child nodes to find the structure:
       // Link contains: LinkMark([), link text, LinkMark(]), LinkMark((), URL, LinkMark())
       // We need to:
