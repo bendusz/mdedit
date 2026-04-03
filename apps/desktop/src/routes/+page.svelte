@@ -133,8 +133,29 @@
     }
   });
 
+  /** Open a file by absolute path, used by drag-drop and file association. */
+  async function handleOpenPath(path: string) {
+    // Guard: auto-save unsaved changes before opening
+    if (fileState.isDirty && fileState.path) {
+      try {
+        const rev = fileState.revision;
+        await saveFile(fileState.path, contentForSave());
+        fileState.markSaved(rev);
+      } catch (_) { /* proceed even if save fails */ }
+    }
+    try {
+      const result = await openFile(path);
+      fileState.setFile(result.path, result.filename, result.content);
+      editor.loadFile(result.content);
+      addToRecent(result.path);
+    } catch (e) {
+      console.error('Failed to open file:', e);
+    }
+  }
+
   let unlistenDragDrop: (() => void) | null = null;
   let unlistenMenu: (() => void) | null = null;
+  let unlistenOpenFile: (() => void) | null = null;
 
   onMount(async () => {
     window.addEventListener('keydown', handleKeydown);
@@ -148,30 +169,16 @@
       }
     });
 
+    // Listen for files opened via OS file association (double-click in Finder)
+    unlistenOpenFile = await listen<string>('open-file', (event) => {
+      handleOpenPath(event.payload);
+    });
+
     unlistenDragDrop = await getCurrentWebview().onDragDropEvent(async (event) => {
       if (event.payload.type === 'drop') {
         const paths = event.payload.paths;
         if (paths.length > 0 && paths[0].match(/\.(md|markdown|mdx)$/i)) {
-          // Guard: check for unsaved changes before opening dropped file
-          if (fileState.isDirty) {
-            // For now, auto-save before opening. A proper confirm dialog
-            // will be added in Task 25 (Stability and Recovery).
-            if (fileState.path) {
-              try {
-                const rev = fileState.revision;
-                await saveFile(fileState.path, contentForSave());
-                fileState.markSaved(rev);
-              } catch (_) { /* proceed even if save fails */ }
-            }
-          }
-          try {
-            const result = await openFile(paths[0]);
-            fileState.setFile(result.path, result.filename, result.content);
-            editor.loadFile(result.content);
-            addToRecent(result.path);
-          } catch (e) {
-            console.error('Failed to open dropped file:', e);
-          }
+          await handleOpenPath(paths[0]);
         }
       }
     });
@@ -182,6 +189,7 @@
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
     unlistenDragDrop?.();
     unlistenMenu?.();
+    unlistenOpenFile?.();
   });
 </script>
 
