@@ -46,3 +46,12 @@ export { defaultCommands, filterCommands, type PaletteCommand } from './command-
 export { getOutline, type OutlineEntry } from './outline';
 
 export { markdownToHtml } from './export';
+
+export {
+  parseTable,
+  addColumn,
+  removeColumn,
+  addRow,
+  removeRow,
+  type TableInfo,
+} from './extensions/table-editor';

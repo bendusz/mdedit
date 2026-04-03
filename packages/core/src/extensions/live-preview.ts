@@ -9,6 +9,7 @@ import { blockquoteDecoration, blockquoteStyles } from './blockquote-decoration'
 import { hrDecoration, hrStyles } from './hr-decoration';
 import { listDecoration, listStyles } from './list-decoration';
 import { tableDecoration, tableStyles } from './table-decoration';
+import { tableWidget } from './table-widget';
 import { frontmatterDecoration, frontmatterStyles } from './frontmatter-decoration';
 
 export { headingDecoration } from './heading-decoration';
@@ -20,6 +21,7 @@ export { blockquoteDecoration, blockquoteStyles } from './blockquote-decoration'
 export { hrDecoration, hrStyles } from './hr-decoration';
 export { listDecoration, listStyles } from './list-decoration';
 export { tableDecoration, tableStyles } from './table-decoration';
+export { tableWidget } from './table-widget';
 export { frontmatterDecoration, frontmatterStyles } from './frontmatter-decoration';
 export { FrontmatterExtension } from './frontmatter-parser';
 
@@ -52,6 +54,7 @@ export function livePreview(): Extension[] {
     listStyles,
     tableDecoration,
     tableStyles,
+    tableWidget,
     frontmatterDecoration,
     frontmatterStyles,
   ];
