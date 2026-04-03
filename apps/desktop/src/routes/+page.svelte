@@ -189,15 +189,32 @@
     unlistenClose = await currentWindow.onCloseRequested(async (event) => {
       if (fileState.isDirty) {
         event.preventDefault();
-        // Auto-save before closing
+
         if (fileState.path) {
+          // File has a path — try to auto-save before closing
           try {
             const rev = fileState.revision;
             await saveFile(fileState.path, contentForSave());
             fileState.markSaved(rev);
-          } catch (_) { /* proceed even if save fails */ }
+            await currentWindow.destroy();
+          } catch (e) {
+            // Save failed — keep window open so user doesn't lose work
+            console.error('Failed to save on close:', e);
+          }
+        } else {
+          // Untitled dirty document — offer Save As dialog
+          try {
+            const result = await saveFileAsDialog(contentForSave());
+            if (result) {
+              // Saved successfully — close
+              fileState.setFile(result.path, result.filename, fileState.content);
+              await currentWindow.destroy();
+            }
+            // If user cancelled Save As, window stays open (event was prevented)
+          } catch (e) {
+            console.error('Failed to save on close:', e);
+          }
         }
-        await currentWindow.destroy();
       }
     });
   });
