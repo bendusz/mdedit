@@ -27,6 +27,8 @@ function buildDecorations(state: EditorState): DecorationSet {
       if (node.name !== 'Blockquote') return;
 
       const firstLine = state.doc.lineAt(node.from);
+      // Skip blockquotes that are admonitions — handled by admonitionDecoration
+      if (/^>\s*\[!\w+\]/.test(firstLine.text)) return;
       const lastLine = state.doc.lineAt(node.to);
 
       for (let l = firstLine.number; l <= lastLine.number; l++) {

@@ -1,6 +1,7 @@
 import { Marked } from 'marked';
 import markedFootnote from 'marked-footnote';
 import { replaceEmojiShortcodes } from './extensions/emoji';
+import { parseAdmonitionType } from './extensions/admonition-decoration';
 
 const htmlTemplate = (body: string): string => `<!DOCTYPE html>
 <html lang="en">
@@ -164,6 +165,40 @@ const htmlTemplate = (body: string): string => `<!DOCTYPE html>
     list-style-type: none;
   }
 
+  /* Admonitions / Callouts */
+  .admonition {
+    margin: 0 0 16px 0;
+    padding: 12px 16px;
+    border-left: 4px solid;
+    border-radius: 4px;
+  }
+
+  .admonition-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .admonition-blue { border-left-color: #3b82f6; background-color: rgba(59, 130, 246, 0.08); }
+  .admonition-blue .admonition-title { color: #2563eb; }
+
+  .admonition-green { border-left-color: #22c55e; background-color: rgba(34, 197, 94, 0.08); }
+  .admonition-green .admonition-title { color: #16a34a; }
+
+  .admonition-purple { border-left-color: #8b5cf6; background-color: rgba(139, 92, 246, 0.08); }
+  .admonition-purple .admonition-title { color: #7c3aed; }
+
+  .admonition-amber { border-left-color: #f59e0b; background-color: rgba(245, 158, 11, 0.08); }
+  .admonition-amber .admonition-title { color: #d97706; }
+
+  .admonition-red { border-left-color: #ef4444; background-color: rgba(239, 68, 68, 0.08); }
+  .admonition-red .admonition-title { color: #dc2626; }
+
+  .admonition-yellow { border-left-color: #eab308; background-color: rgba(234, 179, 8, 0.08); }
+  .admonition-yellow .admonition-title { color: #ca8a04; }
+
+  .admonition-gray { border-left-color: #6b7280; background-color: rgba(107, 114, 128, 0.08); }
+  .admonition-gray .admonition-title { color: #4b5563; }
+
   /* Print-optimized styles */
   @media print {
     body {
@@ -239,6 +274,104 @@ ${body}
 </body>
 </html>`;
 
+/** Color class mapping for admonition types in HTML export. */
+const admonitionColorMap: Record<string, string> = {
+  NOTE: 'blue',
+  TIP: 'green',
+  IMPORTANT: 'purple',
+  WARNING: 'amber',
+  CAUTION: 'red',
+  INFO: 'blue',
+  SUCCESS: 'green',
+  QUESTION: 'yellow',
+  FAILURE: 'red',
+  DANGER: 'red',
+  BUG: 'red',
+  EXAMPLE: 'purple',
+  QUOTE: 'gray',
+};
+
+/** Icon mapping for admonition types in HTML export. */
+const admonitionIconMap: Record<string, string> = {
+  NOTE: '\u2139\uFE0F',
+  TIP: '\uD83D\uDCA1',
+  IMPORTANT: '\u2757',
+  WARNING: '\u26A0\uFE0F',
+  CAUTION: '\uD83D\uDED1',
+  INFO: '\u2139\uFE0F',
+  SUCCESS: '\u2705',
+  QUESTION: '\u2753',
+  FAILURE: '\u274C',
+  DANGER: '\u26A0\uFE0F',
+  BUG: '\uD83D\uDC1B',
+  EXAMPLE: '\uD83D\uDCDD',
+  QUOTE: '\u275D',
+};
+
+/** Escape special HTML characters to prevent XSS in exported output. */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/**
+ * Pre-process markdown to convert `> [!TYPE]` callout blocks into styled
+ * HTML div blocks before passing to Marked. This prevents Marked from
+ * rendering them as plain blockquotes.
+ */
+export function preprocessAdmonitions(markdown: string): string {
+  const lines = markdown.split('\n');
+  const result: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const headerMatch = /^>\s*\[!(\w+)\]\s*(.*)$/.exec(lines[i]);
+    if (headerMatch) {
+      const rawType = headerMatch[1];
+      const admonitionType = parseAdmonitionType(rawType);
+      if (admonitionType) {
+        const colorClass = admonitionColorMap[admonitionType];
+        const icon = admonitionIconMap[admonitionType];
+        const customTitle = headerMatch[2].trim();
+        const label = customTitle
+          ? customTitle
+          : admonitionType.charAt(0) + admonitionType.slice(1).toLowerCase();
+
+        // Collect all continuation lines (lines starting with `> `)
+        const bodyLines: string[] = [];
+        i++;
+        while (i < lines.length && /^>\s?/.test(lines[i])) {
+          // Strip the leading `> ` or `>`
+          bodyLines.push(lines[i].replace(/^>\s?/, ''));
+          i++;
+        }
+
+        // Emit HTML div block -- body is emitted as markdown after a blank line
+        // so Marked renders it properly (e.g. paragraphs, inline formatting).
+        result.push('<div class="admonition admonition-' + colorClass + '">');
+        result.push('<div class="admonition-title">' + icon + ' ' + escapeHtml(label) + '</div>');
+        result.push('');  // blank line for Marked paragraph context
+        if (bodyLines.length > 0) {
+          result.push(bodyLines.join('\n'));
+          result.push('');
+        }
+        result.push('</div>');
+        result.push('');
+        continue;
+      }
+    }
+
+    result.push(lines[i]);
+    i++;
+  }
+
+  return result.join('\n');
+}
+
 /** Create a configured Marked instance with GFM and footnote support. */
 function createMarkedInstance(): Marked {
   const instance = new Marked();
@@ -252,11 +385,13 @@ function createMarkedInstance(): Marked {
  *
  * The output is a self-contained HTML file with embedded CSS styling,
  * suitable for viewing in any browser. GFM extensions (tables,
- * strikethrough, task lists) are supported.
+ * strikethrough, task lists) are supported. Admonition callouts
+ * (`> [!TYPE]`) are converted to styled div blocks.
  */
 export function markdownToHtml(markdown: string): string {
   const instance = createMarkedInstance();
-  const processed = replaceEmojiShortcodes(markdown);
+  const withAdmonitions = preprocessAdmonitions(markdown);
+  const processed = replaceEmojiShortcodes(withAdmonitions);
   const body = instance.parse(processed, { async: false });
   return htmlTemplate(body);
 }

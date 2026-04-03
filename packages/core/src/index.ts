@@ -30,7 +30,7 @@ export { getCursorInfo, type CursorInfo } from './observers';
 
 export { EditorView } from '@codemirror/view';
 
-export { livePreview, FrontmatterExtension, mermaidWidget, mathWidget, footnoteDecoration, footnoteStyles, emojiDecoration, emojiAutocomplete, emojiMap, replaceEmojiShortcodes } from './extensions/live-preview';
+export { livePreview, FrontmatterExtension, mermaidWidget, mathWidget, footnoteDecoration, footnoteStyles, emojiDecoration, emojiAutocomplete, emojiMap, replaceEmojiShortcodes, admonitionDecoration, admonitionStyles, parseAdmonitionType, type AdmonitionType } from './extensions/live-preview';
 export { clearMermaidCache, mermaidDarkMode } from './extensions/mermaid-widget';
 export { clearMathCache } from './extensions/math-widget';
 
@@ -60,7 +60,7 @@ export { defaultCommands, filterCommands, type PaletteCommand } from './command-
 
 export { getOutline, type OutlineEntry } from './outline';
 
-export { markdownToHtml } from './export';
+export { markdownToHtml, preprocessAdmonitions } from './export';
 
 export {
   parseTable,

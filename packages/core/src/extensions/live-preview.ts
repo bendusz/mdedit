@@ -15,6 +15,7 @@ import { mermaidWidget } from './mermaid-widget';
 import { mathWidget } from './math-widget';
 import { footnoteDecoration, footnoteStyles } from './footnote-decoration';
 import { emojiDecoration } from './emoji';
+import { admonitionDecoration, admonitionStyles } from './admonition-decoration';
 
 export { headingDecoration } from './heading-decoration';
 export { inlineDecoration, inlineStyles } from './inline-decoration';
@@ -32,6 +33,7 @@ export { mermaidWidget } from './mermaid-widget';
 export { mathWidget } from './math-widget';
 export { footnoteDecoration, footnoteStyles } from './footnote-decoration';
 export { emojiDecoration, emojiAutocomplete, emojiMap, replaceEmojiShortcodes } from './emoji';
+export { admonitionDecoration, admonitionStyles, parseAdmonitionType, type AdmonitionType } from './admonition-decoration';
 
 const headingStyles = EditorView.baseTheme({
   '.cm-heading-1': { fontSize: '2em', fontWeight: '700', lineHeight: '1.2' },
@@ -70,5 +72,7 @@ export function livePreview(): Extension[] {
     footnoteDecoration,
     footnoteStyles,
     emojiDecoration,
+    admonitionDecoration,
+    admonitionStyles,
   ];
 }
