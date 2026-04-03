@@ -6,13 +6,18 @@ import { EditorView } from '@codemirror/view';
  * CM6 themes inject <style> elements with generated class names.
  * In jsdom, inline styles are not applied, so we verify themes by
  * checking the injected style sheet content for the expected CSS value.
+ *
+ * We look specifically for rules targeting .cm-content (via the
+ * generated class name that follows it) to avoid matching unrelated
+ * max-width rules from other extensions (e.g. the command palette).
  */
 function findMaxWidthInStyles(): string | null {
   const styles = Array.from(document.querySelectorAll('style'));
   // Scan in reverse so the most recently injected style wins
   for (let i = styles.length - 1; i >= 0; i--) {
     const text = styles[i].textContent ?? '';
-    const match = text.match(/max-width:\s*([^;}\s]+)/);
+    // Match rules for .cm-content (possibly with a generated CM6 class suffix)
+    const match = text.match(/\.cm-content[^{]*\{[^}]*max-width:\s*([^;}\s]+)/);
     if (match) return match[1];
   }
   return null;

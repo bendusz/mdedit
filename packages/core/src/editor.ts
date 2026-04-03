@@ -12,6 +12,7 @@ import { search, searchKeymap } from '@codemirror/search';
 import { livePreview } from './extensions/live-preview';
 import { imageBasePath } from './extensions/image-widget';
 import { markdownKeybindings } from './toolbar/keybindings';
+import { commandPaletteExtension } from './command-palette/palette-extension';
 import { getCursorInfo, type CursorInfo } from './observers';
 import { lightTheme, darkTheme } from './theme';
 
@@ -97,6 +98,7 @@ export function createEditor(config: EditorConfig): EditorView {
       keymap.of(markdownKeybindings),
       keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
       ...livePreview(),
+      ...commandPaletteExtension(),
       themeCompartment.of(dark ? darkTheme : lightTheme),
       imageBasePathCompartment.of(imageBasePath.of(basePath)),
       contentWidthCompartment.of(contentWidthTheme(contentWidth)),
