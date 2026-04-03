@@ -38,13 +38,24 @@ function buildDecorations(state: EditorState): DecorationSet {
         );
 
         // When cursor is NOT on this line, hide the > marker and trailing space
+        // Use Lezer QuoteMark children of the Blockquote node for accurate positions
         if (!cursorLines.has(l)) {
-          const lineText = state.doc.sliceString(line.from, line.to);
-          const match = lineText.match(/^(\s*>\s?)/);
-          if (match) {
-            replaceDecorations.push(
-              Decoration.replace({}).range(line.from, line.from + match[1].length),
-            );
+          let child = node.node.firstChild;
+          while (child) {
+            if (child.name === 'QuoteMark') {
+              const markLine = state.doc.lineAt(child.from);
+              if (markLine.number === l) {
+                // Hide the QuoteMark and one trailing space if present
+                let hideEnd = child.to;
+                if (hideEnd < line.to && state.doc.sliceString(hideEnd, hideEnd + 1) === ' ') {
+                  hideEnd++;
+                }
+                replaceDecorations.push(
+                  Decoration.replace({}).range(child.from, hideEnd),
+                );
+              }
+            }
+            child = child.nextSibling;
           }
         }
       }

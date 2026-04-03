@@ -60,28 +60,32 @@ function buildDecorations(view: EditorView): DecorationSet {
       const line = state.doc.lineAt(node.from);
       const lineText = state.doc.sliceString(line.from, line.to);
 
-      // Check for task list pattern: - [ ] or - [x]
-      const taskMatch = lineText.match(/^(\s*[-*+]\s+)\[([ x])\]\s/);
+      // Check for task list pattern: -, *, +, or ordered (1.) markers with [ ] or [x]/[X]
+      const taskMatch = lineText.match(/^(\s*(?:[-*+]|\d+[.)]) +)\[([ xX])\] /);
       if (!taskMatch) return;
 
-      const checked = taskMatch[2] === 'x';
+      const checked = taskMatch[2].toLowerCase() === 'x';
 
       // Apply task-list line class
       lineDecorations.push(
         Decoration.line({ class: 'cm-task-list' }).range(line.from),
       );
 
-      // When cursor is NOT on this line, replace the entire marker with a checkbox widget
+      // When cursor is NOT on this line, replace the marker (but preserve leading indentation)
       if (!cursorLines.has(line.number)) {
-        // The full prefix to replace: "- [ ] " or "  - [x] " etc.
-        const fullPrefix = taskMatch[0];
+        // Find where the actual marker starts (after indentation)
+        const indentMatch = lineText.match(/^(\s*)/);
+        const indent = indentMatch ? indentMatch[1].length : 0;
         // Position of the [ bracket in the document
         const bracketPos = line.from + taskMatch[1].length;
+        // Replace from marker start (after indent) through "[ ] "
+        const replaceStart = line.from + indent;
+        const replaceEnd = line.from + taskMatch[0].length;
 
         replaceDecorations.push(
           Decoration.replace({
             widget: new CheckboxWidget(checked, bracketPos, view),
-          }).range(line.from, line.from + fullPrefix.length),
+          }).range(replaceStart, replaceEnd),
         );
       }
     },
