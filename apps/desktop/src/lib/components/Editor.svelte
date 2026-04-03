@@ -52,4 +52,10 @@
   .editor-container :global(.cm-scroller) {
     overflow: auto;
   }
+
+  .editor-container :global(.cm-content) {
+    padding: 16px 24px;
+    max-width: 80ch;
+    margin: 0 auto;
+  }
 </style>

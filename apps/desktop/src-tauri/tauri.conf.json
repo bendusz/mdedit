@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "desktop",
+  "productName": "mdedit",
   "version": "0.1.0",
-  "identifier": "com.ben.desktop",
+  "identifier": "com.mdedit.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "desktop",
-        "width": 800,
-        "height": 600
+        "title": "mdedit",
+        "width": 900,
+        "height": 700,
+        "minWidth": 400,
+        "minHeight": 300
       }
     ],
     "security": {
