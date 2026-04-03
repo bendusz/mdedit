@@ -30,7 +30,8 @@ export { getCursorInfo, type CursorInfo } from './observers';
 
 export { EditorView } from '@codemirror/view';
 
-export { livePreview, FrontmatterExtension } from './extensions/live-preview';
+export { livePreview, FrontmatterExtension, mermaidWidget } from './extensions/live-preview';
+export { clearMermaidCache, mermaidDarkMode } from './extensions/mermaid-widget';
 
 export {
   toggleBold,

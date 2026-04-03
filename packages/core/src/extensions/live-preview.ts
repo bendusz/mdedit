@@ -11,6 +11,7 @@ import { listDecoration, listStyles } from './list-decoration';
 import { tableDecoration, tableStyles } from './table-decoration';
 import { tableWidget } from './table-widget';
 import { frontmatterDecoration, frontmatterStyles } from './frontmatter-decoration';
+import { mermaidWidget } from './mermaid-widget';
 
 export { headingDecoration } from './heading-decoration';
 export { inlineDecoration, inlineStyles } from './inline-decoration';
@@ -24,6 +25,7 @@ export { tableDecoration, tableStyles } from './table-decoration';
 export { tableWidget } from './table-widget';
 export { frontmatterDecoration, frontmatterStyles } from './frontmatter-decoration';
 export { FrontmatterExtension } from './frontmatter-parser';
+export { mermaidWidget } from './mermaid-widget';
 
 const headingStyles = EditorView.baseTheme({
   '.cm-heading-1': { fontSize: '2em', fontWeight: '700', lineHeight: '1.2' },
@@ -57,5 +59,6 @@ export function livePreview(): Extension[] {
     tableWidget,
     frontmatterDecoration,
     frontmatterStyles,
+    mermaidWidget,
   ];
 }

@@ -20,7 +20,8 @@
     "@codemirror/view": "^6",
     "@lezer/common": "^1",
     "@lezer/markdown": "^1",
-    "marked": "^17.0.5"
+    "marked": "^17.0.5",
+    "mermaid": "^11.14.0"
   },
   "devDependencies": {
     "jsdom": "^26",

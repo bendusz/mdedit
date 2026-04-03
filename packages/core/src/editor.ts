@@ -14,12 +14,14 @@ import { imageBasePath } from './extensions/image-widget';
 import { markdownKeybindings } from './toolbar/keybindings';
 import { commandPaletteExtension } from './command-palette/palette-extension';
 import { getCursorInfo, type CursorInfo } from './observers';
-import { lightTheme, darkTheme, getTheme, type ThemeId } from './theme';
+import { lightTheme, darkTheme, getTheme, isThemeDark, type ThemeId } from './theme';
+import { mermaidDarkMode, clearMermaidCache } from './extensions/mermaid-widget';
 
 const themeCompartment = new Compartment();
 const imageBasePathCompartment = new Compartment();
 const contentWidthCompartment = new Compartment();
 const readOnlyCompartment = new Compartment();
+const mermaidDarkModeCompartment = new Compartment();
 
 export type LineSeparator = '\n' | '\r\n';
 
@@ -56,8 +58,14 @@ export function setEditorTheme(view: EditorView, themeOrDark: ThemeId | boolean)
   } else {
     themeId = themeOrDark;
   }
+  const dark = isThemeDark(themeId);
+  // Clear cached SVG renders so diagrams are re-rendered with the new theme.
+  clearMermaidCache();
   view.dispatch({
-    effects: themeCompartment.reconfigure(getTheme(themeId)),
+    effects: [
+      themeCompartment.reconfigure(getTheme(themeId)),
+      mermaidDarkModeCompartment.reconfigure(mermaidDarkMode.of(dark)),
+    ],
   });
 }
 
@@ -120,6 +128,7 @@ export function createEditor(config: EditorConfig): EditorView {
       ...livePreview(),
       ...commandPaletteExtension(),
       themeCompartment.of(dark ? darkTheme : lightTheme),
+      mermaidDarkModeCompartment.of(mermaidDarkMode.of(dark ?? false)),
       imageBasePathCompartment.of(imageBasePath.of(basePath)),
       contentWidthCompartment.of(contentWidthTheme(contentWidth)),
       readOnlyCompartment.of([
