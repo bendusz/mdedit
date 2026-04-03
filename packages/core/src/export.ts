@@ -128,6 +128,73 @@ const htmlTemplate = (body: string): string => `<!DOCTYPE html>
   .task-list-item {
     list-style-type: none;
   }
+
+  /* Print-optimized styles */
+  @media print {
+    body {
+      background-color: #fff;
+      color: #000;
+      font-size: 12pt;
+    }
+
+    .container {
+      max-width: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    a {
+      color: #000;
+      text-decoration: underline;
+    }
+
+    a[href^="http"]::after, a[href^="https"]::after {
+      content: " (" attr(href) ")";
+      font-size: 0.85em;
+      color: #555;
+    }
+
+    pre {
+      background-color: #f6f8fa !important;
+      border: 1px solid #ddd;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      page-break-inside: avoid;
+    }
+
+    code {
+      background-color: #f0f0f0 !important;
+    }
+
+    blockquote {
+      border-left-color: #999;
+      color: #333;
+    }
+
+    table th {
+      background-color: #f0f0f0 !important;
+    }
+
+    table tr:nth-child(2n) {
+      background-color: transparent !important;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+      page-break-after: avoid;
+    }
+
+    h1 { border-bottom-color: #ccc; }
+    h2 { border-bottom-color: #ccc; }
+
+    img {
+      max-width: 100% !important;
+      page-break-inside: avoid;
+    }
+
+    hr {
+      background-color: #ccc;
+    }
+  }
 </style>
 </head>
 <body>

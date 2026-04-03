@@ -128,4 +128,26 @@ describe('markdownToHtml', () => {
     expect(html).toContain('<li>Second</li>');
     expect(html).toContain('</ol>');
   });
+
+  it('should include @media print styles', () => {
+    const html = markdownToHtml('# Test');
+    expect(html).toContain('@media print');
+  });
+
+  it('should include print-specific page-break rules', () => {
+    const html = markdownToHtml('test');
+    expect(html).toContain('page-break-after: avoid');
+    expect(html).toContain('page-break-inside: avoid');
+  });
+
+  it('should set print-friendly body styles', () => {
+    const html = markdownToHtml('test');
+    // Print styles should use pt units for font size
+    expect(html).toContain('font-size: 12pt');
+  });
+
+  it('should remove container max-width for print', () => {
+    const html = markdownToHtml('test');
+    expect(html).toContain('max-width: none');
+  });
 });

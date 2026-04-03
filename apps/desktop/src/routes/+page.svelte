@@ -16,6 +16,7 @@
     savePastedImage,
     type FileData,
   } from '$lib/tauri/fileOps';
+  import { printHtml } from '$lib/print';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { listen } from '@tauri-apps/api/event';
   import { setEditorTheme, setContentWidth, setReadOnly, registerPaletteCommands, getOutline, markdownToHtml, EditorView, type CursorInfo, type PaletteCommand, type OutlineEntry } from '@mdedit/core';
@@ -223,6 +224,21 @@
     }
   }
 
+  function handlePrint() {
+    try {
+      const html = markdownToHtml(fileState.content);
+      printHtml(html);
+    } catch (e) {
+      console.error('Failed to print:', e);
+    }
+  }
+
+  function handleExportPdf() {
+    // On macOS, the native print dialog provides "Save as PDF" in the PDF dropdown.
+    // Reuse the same print flow — the user selects "Save as PDF" from the dialog.
+    handlePrint();
+  }
+
   async function handleNew() {
     if (!(await saveCurrentDocumentBeforeSwitch())) {
       return;
@@ -396,6 +412,9 @@
     } else if (mod && key === 's') {
       e.preventDefault();
       void handleSave();
+    } else if (mod && key === 'p') {
+      e.preventDefault();
+      handlePrint();
     } else if (mod && key === 'n') {
       e.preventDefault();
       void handleNew();
@@ -461,6 +480,8 @@
         { id: 'file-save', label: 'Save', category: 'File', shortcut: '\u2318S', execute: () => { void handleSave(); } },
         { id: 'file-save-as', label: 'Save As...', category: 'File', shortcut: '\u2318\u21E7S', execute: () => { void handleSaveAs(); } },
         { id: 'file-export-html', label: 'Export to HTML', category: 'File', shortcut: '\u2318\u21E7E', execute: () => { void handleExportHtml(); } },
+        { id: 'file-print', label: 'Print', category: 'File', shortcut: '\u2318P', execute: () => { handlePrint(); } },
+        { id: 'file-export-pdf', label: 'Export to PDF', category: 'File', execute: () => { handleExportPdf(); } },
         { id: 'view-toggle-outline', label: 'Toggle Outline', category: 'View', shortcut: '\u2318\u21E7O', execute: () => { toggleOutline(); } },
         { id: 'view-toggle-reading-mode', label: 'Toggle Reading Mode', category: 'View', shortcut: '\u2318\u21E7R', execute: () => { void toggleReadingMode(); } },
         { id: 'edit-paste-image', label: 'Paste Image', category: 'Edit', execute: () => { void pasteImageFromClipboard(); } },
@@ -476,6 +497,8 @@
         case 'save': void handleSave(); break;
         case 'save_as': void handleSaveAs(); break;
         case 'export_html': void handleExportHtml(); break;
+        case 'print': handlePrint(); break;
+        case 'export_pdf': handleExportPdf(); break;
       }
     });
 

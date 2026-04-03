@@ -18,6 +18,16 @@ pub fn setup_menu(app: &App) -> Result<(), Box<dyn std::error::Error>> {
                 .accelerator("CmdOrCtrl+Shift+E")
                 .build(app)?,
         )
+        .item(
+            &MenuItemBuilder::with_id("export_pdf", "Export to PDF...")
+                .build(app)?,
+        )
+        .separator()
+        .item(
+            &MenuItemBuilder::with_id("print", "Print...")
+                .accelerator("CmdOrCtrl+P")
+                .build(app)?,
+        )
         .separator()
         .close_window()
         .build()?;
@@ -41,7 +51,7 @@ pub fn setup_menu(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     app.on_menu_event(move |app_handle, event| {
         let id = event.id().0.as_str();
         match id {
-            "new" | "open" | "save" | "save_as" | "export_html" => {
+            "new" | "open" | "save" | "save_as" | "export_html" | "export_pdf" | "print" => {
                 let _ = app_handle.emit("menu-event", id);
             }
             _ => {}
