@@ -24,9 +24,8 @@ const frontmatterParser: BlockParser = {
     // Frontmatter must start at the very beginning of the document
     if (cx.lineStart !== 0) return false;
 
-    // The first line must be exactly `---` (with optional trailing spaces)
-    const firstLineText = line.text.trim();
-    if (firstLineText !== '---') return false;
+    // Delimiters may have trailing whitespace, but must start at column 0.
+    if (!isDelimiterLine(line.text)) return false;
 
     const openStart = cx.lineStart;
     const openEnd = cx.lineStart + line.text.length;
@@ -83,9 +82,9 @@ function findClosingDelimiter(text: string): number {
     // Find next newline to get a line
     const nlIndex = text.indexOf('\n', pos);
     const lineEnd = nlIndex === -1 ? text.length : nlIndex;
-    const lineText = text.substring(pos, lineEnd).trim();
+    const lineText = text.substring(pos, lineEnd);
 
-    if (lineText === '---') {
+    if (isDelimiterLine(lineText)) {
       return pos;
     }
 
@@ -93,6 +92,11 @@ function findClosingDelimiter(text: string): number {
     pos = nlIndex + 1;
   }
   return -1;
+}
+
+function isDelimiterLine(text: string): boolean {
+  const normalized = text.endsWith('\r') ? text.slice(0, -1) : text;
+  return /^---[ \t]*$/.test(normalized);
 }
 
 /** @lezer/markdown extension that enables YAML frontmatter parsing. */

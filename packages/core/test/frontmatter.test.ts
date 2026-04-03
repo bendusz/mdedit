@@ -35,6 +35,19 @@ function getNodeNames(view: EditorView): string[] {
   return names;
 }
 
+function getFirstNodeText(view: EditorView, target: string): string | null {
+  let text: string | null = null;
+  syntaxTree(view.state).iterate({
+    enter(node) {
+      if (text === null && node.name === target) {
+        text = view.state.sliceDoc(node.from, node.to);
+        return false;
+      }
+    },
+  });
+  return text;
+}
+
 describe('frontmatter parser', () => {
   let container: HTMLElement;
   let view: EditorView;
@@ -98,6 +111,17 @@ describe('frontmatter parser', () => {
     const names = getNodeNames(view);
     expect(names).toContain('FrontmatterBlock');
     expect(names).toContain('FrontmatterContent');
+  });
+
+  it('should not treat an indented --- inside YAML content as the closing delimiter', () => {
+    const content = '---\ndescription: |\n  ---\n  still yaml\n---\n\n# Body';
+    view = createEditor({ parent: container, content });
+    flushEditorUpdate(view);
+
+    const names = getNodeNames(view);
+    expect(names).toContain('FrontmatterBlock');
+    expect(names).toContain('ATXHeading1');
+    expect(getFirstNodeText(view, 'FrontmatterContent')).toContain('still yaml');
   });
 });
 
