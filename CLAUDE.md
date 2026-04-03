@@ -58,6 +58,26 @@ cd apps/desktop && pnpm check
 - **Line ending preservation** — `detectLineSeparator()` detects CRLF/LF on open; `contentForSave()` restores original line endings before writing.
 - **Check latest docs** — Before implementing any feature, search the web for current Tauri 2, CodeMirror 6, Svelte 5, and Lezer documentation. APIs evolve between versions.
 
+## CM6 Gotchas
+
+- **Block decorations (widgets with `block: true`) require a `StateField`**, not a ViewPlugin. ViewPlugin throws `RangeError: Block decorations may not be specified via plugins`.
+- **Decoration sort order** — line decorations must come before replace decorations at the same `from` position. Build separate arrays and merge, or use `Decoration.set(decos, true)` for auto-sort.
+- **`isFileLoad` annotation** — always use `loadEditorContent()` for programmatic content changes. Never use raw `view.dispatch({ changes })` to load files — it triggers `onDocChange` and marks the document dirty.
+
+## Lezer Markdown Node Names
+
+Headings: `ATXHeading1`-`6`, `SetextHeading1`-`2`, `HeaderMark`
+Inline: `StrongEmphasis`, `Emphasis`, `Strikethrough`, `EmphasisMark`, `StrikethroughMark`
+Links/Images: `Link`, `Image`, `LinkMark`, `URL`
+Blocks: `FencedCode`, `Blockquote`, `QuoteMark`, `HorizontalRule`, `ListItem`, `Table`
+
+## Tauri 2 Notes
+
+- Drag-and-drop: `getCurrentWebview().onDragDropEvent()` (NOT `getCurrentWindow()`)
+- Menu: use `SubmenuBuilder` pattern from latest docs, not `Submenu::with_items`
+- Dialogs are Rust-side only — never import `@tauri-apps/plugin-dialog` in JS
+- `cargo test` must run from `apps/desktop/src-tauri/` directory
+
 ## Design Spec & Implementation Plan
 
 - Spec: `docs/superpowers/specs/2026-04-02-mdedit-design.md`
