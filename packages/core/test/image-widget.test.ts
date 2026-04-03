@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createEditor } from '../src/editor';
+import { createEditor, setImageBasePath } from '../src/editor';
 import { EditorView } from '@codemirror/view';
 import { isSafeImageSrc } from '../src/extensions/image-widget';
 
@@ -164,5 +164,34 @@ describe('image widget decorations', () => {
     const img = widgets[0].querySelector('img');
     expect(img).not.toBeNull();
     expect(img!.getAttribute('alt')).toBe('');
+  });
+
+  it('should resolve relative paths against the configured image base path', () => {
+    view = createEditor({
+      parent: container,
+      content: '![alt text](photo.png)\n\ncursor here',
+      imageBasePath: '/Users/ben/docs',
+    });
+    moveCursorToLine(view, 3);
+
+    const img = container.querySelector('.cm-image-widget img');
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute('src')).toBe('/Users/ben/docs/photo.png');
+  });
+
+  it('should update image widgets when the base path changes', () => {
+    view = createEditor({
+      parent: container,
+      content: '![alt text](photo.png)\n\ncursor here',
+      imageBasePath: '/Users/ben/docs',
+    });
+    moveCursorToLine(view, 3);
+
+    setImageBasePath(view, '/Users/ben/other');
+    flushEditorUpdate(view);
+
+    const img = container.querySelector('.cm-image-widget img');
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute('src')).toBe('/Users/ben/other/photo.png');
   });
 });

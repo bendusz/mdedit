@@ -158,7 +158,7 @@ const imageField = StateField.define<DecorationSet>({
     return buildImageDecorations(state);
   },
   update(value, tr) {
-    if (tr.docChanged || tr.selection) {
+    if (tr.docChanged || tr.selection || tr.effects.length > 0) {
       return buildImageDecorations(tr.state);
     }
     return value;

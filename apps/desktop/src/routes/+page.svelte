@@ -5,8 +5,15 @@
   import StatusBar from '$lib/components/StatusBar.svelte';
   import { fileState } from '$lib/stores/fileState.svelte';
   import { themeState } from '$lib/stores/theme.svelte';
-  import { openFile, openFileDialog, saveFile, saveFileAsDialog, addToRecent } from '$lib/tauri/fileOps';
-  import { getCurrentWebview } from '@tauri-apps/api/webview';
+  import {
+    acceptPendingFile,
+    addToRecent,
+    clearCurrentFile,
+    openFileDialog,
+    saveCurrentFile,
+    saveFileAsDialog,
+    type FileData,
+  } from '$lib/tauri/fileOps';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { listen } from '@tauri-apps/api/event';
   import { setEditorTheme, type CursorInfo } from '@mdedit/core';
@@ -17,6 +24,20 @@
   let wordCount = $state(0);
 
   let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  const WELCOME_CONTENT = '# Welcome to mdedit\n\nStart typing your markdown here.';
+
+  function directoryOf(filePath: string | null): string {
+    if (!filePath) {
+      return '';
+    }
+    return filePath.replace(/[\\/][^\\/]*$/, '');
+  }
+
+  function applyLoadedFile(data: FileData) {
+    fileState.setFile(data.path, data.filename, data.content);
+    editor.setFileBasePath(directoryOf(data.path));
+    editor.loadFile(data.content);
+  }
 
   function scheduleAutoSave() {
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
@@ -24,7 +45,7 @@
       if (fileState.isDirty && fileState.path) {
         const rev = fileState.revision;
         try {
-          await saveFile(fileState.path, contentForSave());
+          await saveCurrentFile(contentForSave());
           fileState.markSaved(rev);
         } catch (e) {
           console.error('Auto-save failed:', e);
@@ -48,13 +69,54 @@
     wordCount = info.wordCount;
   }
 
+  async function saveCurrentDocumentBeforeSwitch(): Promise<boolean> {
+    if (!fileState.isDirty) {
+      return true;
+    }
+
+    const rev = fileState.revision;
+
+    if (fileState.path) {
+      try {
+        await saveCurrentFile(contentForSave());
+        fileState.markSaved(rev);
+        return true;
+      } catch (e) {
+        console.error('Failed to save file before switching:', e);
+        return false;
+      }
+    }
+
+    try {
+      const result = await saveFileAsDialog(contentForSave());
+      if (!result) {
+        return false;
+      }
+
+      fileState.setFile(result.path, result.filename, result.content);
+      editor.setFileBasePath(directoryOf(result.path));
+      fileState.markSaved(rev);
+      return true;
+    } catch (e) {
+      console.error('Failed to save file before switching:', e);
+      return false;
+    }
+  }
+
   async function handleOpen() {
+    if (!(await saveCurrentDocumentBeforeSwitch())) {
+      return;
+    }
+
     try {
       const result = await openFileDialog();
       if (result) {
-        fileState.setFile(result.path, result.filename, result.content);
-        editor.loadFile(result.content);
-        addToRecent(result.path);
+        applyLoadedFile(result);
+        try {
+          await addToRecent(result.path);
+        } catch (recentError) {
+          console.error('Failed to update recent files:', recentError);
+        }
       }
     } catch (e) {
       console.error('Failed to open file:', e);
@@ -75,7 +137,7 @@
     }
     const rev = fileState.revision;
     try {
-      await saveFile(fileState.path, contentForSave());
+      await saveCurrentFile(contentForSave());
       fileState.markSaved(rev);
     } catch (e) {
       console.error('Failed to save file:', e);
@@ -88,6 +150,7 @@
       const result = await saveFileAsDialog(contentForSave());
       if (result) {
         fileState.setFile(result.path, result.filename, result.content);
+        editor.setFileBasePath(directoryOf(result.path));
         fileState.markSaved(rev);
       }
     } catch (e) {
@@ -95,9 +158,19 @@
     }
   }
 
-  function handleNew() {
+  async function handleNew() {
+    if (!(await saveCurrentDocumentBeforeSwitch())) {
+      return;
+    }
+
     fileState.reset();
-    editor.loadFile('# Welcome to mdedit\n\nStart typing your markdown here.');
+    editor.setFileBasePath('');
+    editor.loadFile(WELCOME_CONTENT);
+    try {
+      await clearCurrentFile();
+    } catch (e) {
+      console.error('Failed to clear current file:', e);
+    }
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -105,16 +178,16 @@
     const key = e.key.toLowerCase();
     if (mod && e.shiftKey && key === 's') {
       e.preventDefault();
-      handleSaveAs();
+      void handleSaveAs();
     } else if (mod && key === 'o') {
       e.preventDefault();
-      handleOpen();
+      void handleOpen();
     } else if (mod && key === 's') {
       e.preventDefault();
-      handleSave();
+      void handleSave();
     } else if (mod && key === 'n') {
       e.preventDefault();
-      handleNew();
+      void handleNew();
     }
   }
 
@@ -133,27 +206,25 @@
     }
   });
 
-  /** Open a file by absolute path, used by drag-drop and file association. */
-  async function handleOpenPath(path: string) {
-    // Guard: auto-save unsaved changes before opening
-    if (fileState.isDirty && fileState.path) {
-      try {
-        const rev = fileState.revision;
-        await saveFile(fileState.path, contentForSave());
-        fileState.markSaved(rev);
-      } catch (_) { /* proceed even if save fails */ }
+  /** Open a Rust-owned external file payload, used by drag-drop and file association. */
+  async function handleOpenExternalFile(data: FileData) {
+    if (!(await saveCurrentDocumentBeforeSwitch())) {
+      return;
     }
+
     try {
-      const result = await openFile(path);
-      fileState.setFile(result.path, result.filename, result.content);
-      editor.loadFile(result.content);
-      addToRecent(result.path);
+      await acceptPendingFile(data.path);
+      applyLoadedFile(data);
+      try {
+        await addToRecent(data.path);
+      } catch (recentError) {
+        console.error('Failed to update recent files:', recentError);
+      }
     } catch (e) {
       console.error('Failed to open file:', e);
     }
   }
 
-  let unlistenDragDrop: (() => void) | null = null;
   let unlistenMenu: (() => void) | null = null;
   let unlistenOpenFile: (() => void) | null = null;
   let unlistenClose: (() => void) | null = null;
@@ -163,25 +234,16 @@
 
     unlistenMenu = await listen<string>('menu-event', (event) => {
       switch (event.payload) {
-        case 'new': handleNew(); break;
-        case 'open': handleOpen(); break;
-        case 'save': handleSave(); break;
-        case 'save_as': handleSaveAs(); break;
+        case 'new': void handleNew(); break;
+        case 'open': void handleOpen(); break;
+        case 'save': void handleSave(); break;
+        case 'save_as': void handleSaveAs(); break;
       }
     });
 
-    // Listen for files opened via OS file association (double-click in Finder)
-    unlistenOpenFile = await listen<string>('open-file', (event) => {
-      handleOpenPath(event.payload);
-    });
-
-    unlistenDragDrop = await getCurrentWebview().onDragDropEvent(async (event) => {
-      if (event.payload.type === 'drop') {
-        const paths = event.payload.paths;
-        if (paths.length > 0 && paths[0].match(/\.(md|markdown|mdx)$/i)) {
-          await handleOpenPath(paths[0]);
-        }
-      }
+    // Listen for files opened via OS file association or drag-drop.
+    unlistenOpenFile = await listen<FileData>('open-file', (event) => {
+      void handleOpenExternalFile(event.payload);
     });
 
     // Guard against closing with unsaved changes — auto-save before quit
@@ -194,7 +256,7 @@
           // File has a path — try to auto-save before closing
           try {
             const rev = fileState.revision;
-            await saveFile(fileState.path, contentForSave());
+            await saveCurrentFile(contentForSave());
             fileState.markSaved(rev);
             await currentWindow.destroy();
           } catch (e) {
@@ -222,7 +284,6 @@
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown);
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
-    unlistenDragDrop?.();
     unlistenMenu?.();
     unlistenOpenFile?.();
     unlistenClose?.();

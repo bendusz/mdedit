@@ -18,6 +18,7 @@
     "@codemirror/search": "^6",
     "@codemirror/state": "^6",
     "@codemirror/view": "^6",
+    "@lezer/common": "^1",
     "@lezer/markdown": "^1"
   },
   "devDependencies": {

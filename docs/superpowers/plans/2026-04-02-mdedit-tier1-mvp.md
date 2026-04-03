@@ -581,7 +581,7 @@ git commit -m "feat(app): mount CodeMirror editor in Tauri shell"
 
 **User Story:** As a user, I can open a `.md` file with Cmd+O and save it with Cmd+S so that I can work with real files.
 
-**Security architecture:** The Rust backend owns BOTH the native dialogs AND file I/O. The webview never directly calls dialog APIs or handles raw file paths from dialogs. The frontend invokes high-level commands (`open_file_dialog`, `save_file`, `save_file_as_dialog`) and receives only content and metadata. This keeps the trust boundary narrow per the spec.
+**Security architecture:** The Rust backend owns BOTH the native dialogs AND file I/O. The webview never directly calls dialog APIs or handles raw file paths from dialogs. The frontend invokes high-level commands (`open_file_dialog`, `save_file`, `save_file_as_dialog`, `confirm_discard`) and receives only content and metadata. This keeps the trust boundary narrow per the spec.
 
 **Files:**
 - Create: `apps/desktop/src-tauri/src/commands.rs`
@@ -590,6 +590,8 @@ git commit -m "feat(app): mount CodeMirror editor in Tauri shell"
 - Create: `apps/desktop/src/lib/stores/fileState.svelte.ts`
 - Modify: `apps/desktop/src/lib/components/Editor.svelte`
 - Modify: `apps/desktop/src/App.svelte`
+- Modify: `packages/core/src/editor.ts`
+- Modify: `packages/core/src/index.ts`
 - Modify: `apps/desktop/src-tauri/Cargo.toml`
 - Modify: `apps/desktop/src-tauri/capabilities/default.json`
 
@@ -619,6 +621,14 @@ pub struct FileData {
     pub path: String,
     pub content: String,
     pub filename: String,
+}
+
+#[derive(serde::Serialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum ConfirmDiscardChoice {
+    Save,
+    Discard,
+    Cancel,
 }
 
 fn validate_and_read(path_buf: &PathBuf) -> Result<FileData, String> {
@@ -714,6 +724,19 @@ pub async fn save_file_as_dialog(app: AppHandle, content: String) -> Result<Opti
         None => Ok(None),
     }
 }
+
+/// Show a native 3-way discard dialog.
+/// Return Save / Discard / Cancel so the caller can avoid accidental data loss.
+#[tauri::command]
+pub async fn confirm_discard(app: AppHandle, filename: String) -> Result<ConfirmDiscardChoice, String> {
+    // Implement with the Rust-side dialog plugin's latest message/dialog API.
+    // Keep the return contract stable even if the underlying dialog API changes.
+    //
+    // Safe placeholder while wiring the real dialog:
+    // always cancel rather than accidentally discarding changes.
+    let _ = (app, filename);
+    Ok(ConfirmDiscardChoice::Cancel)
+}
 ```
 
 **Note:** Check the latest Tauri 2 dialog plugin docs for the exact API. The dialog methods may use `blocking_pick_file()` / `blocking_save_file()` or async equivalents. Adjust accordingly.
@@ -732,6 +755,7 @@ pub fn run() {
             commands::open_file_dialog,
             commands::save_file,
             commands::save_file_as_dialog,
+            commands::confirm_discard,
         ])
         .run(tauri::generate_context!())
         .expect("error while running mdedit");
@@ -776,6 +800,8 @@ export interface FileData {
   filename: string;
 }
 
+export type ConfirmDiscardChoice = 'save' | 'discard' | 'cancel';
+
 /** Rust shows native dialog, reads file, returns content. */
 export async function openFileDialog(): Promise<FileData | null> {
   return invoke<FileData | null>('open_file_dialog');
@@ -795,6 +821,11 @@ export async function saveFile(path: string, content: string): Promise<void> {
 export async function saveFileAsDialog(content: string): Promise<FileData | null> {
   return invoke<FileData | null>('save_file_as_dialog', { content });
 }
+
+/** Rust shows a native Save / Don't Save / Cancel dialog. */
+export async function confirmDiscardDialog(filename: string): Promise<ConfirmDiscardChoice> {
+  return invoke<ConfirmDiscardChoice>('confirm_discard', { filename });
+}
 ```
 
 - [ ] **Step 6: Create file state store (clean state model)**
@@ -803,7 +834,7 @@ The state model must handle two kinds of content changes:
 1. **User edits** (typing in the editor) → mark dirty
 2. **Programmatic loads** (opening a file) → do NOT mark dirty
 
-The clean solution: `Editor.svelte` exposes a `loadFile()` method that replaces the CM6 `EditorState` entirely via `view.setState()`, which does NOT trigger the `updateListener`. User edits go through normal transactions and DO trigger it.
+The clean solution: `@mdedit/core` owns a single `isFileLoad` transaction annotation plus a `loadEditorContent(view, content)` helper. `Editor.svelte` calls that helper for all programmatic loads. User edits go through normal transactions and DO trigger `onDocChange`.
 
 Create `apps/desktop/src/lib/stores/fileState.svelte.ts`:
 ```typescript
@@ -870,9 +901,8 @@ Update `apps/desktop/src/lib/components/Editor.svelte`:
 ```svelte
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { createEditor } from '@mdedit/core';
+  import { createEditor, loadEditorContent } from '@mdedit/core';
   import type { EditorView } from '@codemirror/view';
-  import { EditorState } from '@codemirror/state';
 
   interface Props {
     content: string;
@@ -900,33 +930,12 @@ Update `apps/desktop/src/lib/components/Editor.svelte`:
   });
 
   /**
-   * Load a file into the editor by replacing the entire EditorState.
-   * This does NOT trigger onDocChange — the state replacement is not a
-   * transaction, so the updateListener never fires. This is the correct
-   * way to load external content without marking the file as dirty.
+   * Load external content through @mdedit/core's annotated helper so
+   * programmatic loads never re-mark the document dirty.
    */
   export function loadFile(newContent: string) {
     if (view) {
-      // Create a new state with the same extensions but new content.
-      // view.setState() replaces everything without triggering updateListener.
-      const newState = EditorState.create({
-        doc: newContent,
-        extensions: view.state.toJSON ? [] : [], // Will be refined — see note
-      });
-      // NOTE: EditorState.create needs the same extensions as the original.
-      // The clean approach: export the extensions array from createEditor
-      // so it can be reused here. Alternatively, createEditor can expose a
-      // createState(content) helper. Check CM6 docs for view.setState().
-      //
-      // Simplest working approach for now:
-      view.dispatch({
-        changes: { from: 0, to: view.state.doc.length, insert: newContent },
-        // Use an annotation to mark this as a programmatic load
-        annotations: [/* loadFileAnnotation.of(true) */],
-      });
-      // The annotation approach: create a StateAnnotation in @mdedit/core
-      // that the updateListener checks — if present, skip onDocChange.
-      // This is cleaner than suppressDirty and is the idiomatic CM6 pattern.
+      loadEditorContent(view, newContent);
     }
   }
 
@@ -944,18 +953,24 @@ Update `apps/desktop/src/lib/components/Editor.svelte`:
 </style>
 ```
 
-**Implementation note:** The cleanest CM6 approach is a transaction annotation. In `@mdedit/core`, create:
+**Implementation note:** Pick one CM6 mechanism and use it everywhere. In `@mdedit/core`, create:
 ```typescript
 import { Annotation } from '@codemirror/state';
 export const isFileLoad = Annotation.define<boolean>();
+
+export function loadEditorContent(view: EditorView, newContent: string) {
+  view.dispatch({
+    changes: { from: 0, to: view.state.doc.length, insert: newContent },
+    annotations: [isFileLoad.of(true)],
+  });
+}
 ```
 
 Then in `createEditor`, the updateListener checks:
 ```typescript
 const updateListener = EditorView.updateListener.of((update) => {
+  const isLoad = update.transactions.some(t => t.annotation(isFileLoad));
   if (update.docChanged && onDocChange) {
-    // Skip if this change was a file load, not a user edit
-    const isLoad = update.transactions.some(t => t.annotation(isFileLoad));
     if (!isLoad) {
       onDocChange(update.state.doc.toString());
     }
@@ -963,22 +978,20 @@ const updateListener = EditorView.updateListener.of((update) => {
 });
 ```
 
-And `loadFile()` uses it:
-```typescript
-view.dispatch({
-  changes: { from: 0, to: view.state.doc.length, insert: newContent },
-  annotations: [isFileLoad.of(true)],
-});
-```
-
-This is the idiomatic CM6 pattern — no hacks, no race conditions.
+Export `loadEditorContent` from `packages/core/src/index.ts` and have `Editor.svelte` call only that helper. Do not keep a second `setState()` path or a placeholder implementation in the plan.
 
 Update `apps/desktop/src/App.svelte`:
 ```svelte
 <script lang="ts">
   import Editor from './lib/components/Editor.svelte';
   import { fileState } from './lib/stores/fileState.svelte';
-  import { openFileDialog, saveFile, saveFileAsDialog } from './lib/tauri/fileOps';
+  import {
+    openFileDialog,
+    openFile,
+    saveFile,
+    saveFileAsDialog,
+    confirmDiscardDialog,
+  } from './lib/tauri/fileOps';
 
   let editor: Editor;
 
@@ -989,6 +1002,13 @@ Update `apps/desktop/src/App.svelte`:
       fileState.setFile(result.path, result.filename, result.content);
       editor.loadFile(result.content); // Does NOT trigger onDocChange
     }
+  }
+
+  async function handleOpenPath(path: string) {
+    if (fileState.isDirty && !await confirmDiscard()) return;
+    const result = await openFile(path);
+    fileState.setFile(result.path, result.filename, result.content);
+    editor.loadFile(result.content); // Same path used by recent/drop/file association
   }
 
   async function handleSave(): Promise<boolean> {
@@ -1028,16 +1048,18 @@ Update `apps/desktop/src/App.svelte`:
     editor.loadFile('');
   }
 
-  /** Returns true if it's OK to discard, false if user cancelled. */
+  /** Returns true only for successful Save or explicit Don't Save. */
   async function confirmDiscard(): Promise<boolean> {
-    // Use Tauri dialog for a native confirm. Invoke a Rust command
-    // that shows a message dialog: "Save changes to X?"
-    // Options: Save / Don't Save / Cancel
-    // For now, use a simple JS confirm. Replace with native dialog in polish.
-    if (confirm(`Save changes to ${fileState.filename}?`)) {
+    if (!fileState.isDirty) return true;
+
+    const choice = await confirmDiscardDialog(fileState.filename);
+    if (choice === 'save') {
       return await handleSave();
     }
-    return true; // "Don't Save" — discard is OK
+    if (choice === 'discard') {
+      return true;
+    }
+    return false; // cancel
   }
 
   function handleContentChange(content: string) {
@@ -3115,12 +3137,14 @@ Create `apps/desktop/src/lib/components/StatusBar.svelte`:
 
 Add StatusBar below Editor in `App.svelte`. Add `$state` variables for `cursorLine`, `cursorCol`, `wordCount`.
 
-**Important:** Cursor info must update on both content changes AND cursor movement (arrow keys, clicks). Add a second callback to `EditorConfig` and `createEditor`:
+**Important:** Cursor info must update on both content changes AND cursor movement (arrow keys, clicks). Extend the same Task 4 update listener rather than creating a second competing implementation:
 
 In `packages/core/src/editor.ts`, extend the `updateListener` to also fire on selection changes:
 ```typescript
 const updateListener = EditorView.updateListener.of((update) => {
-  if (update.docChanged && onDocChange) {
+  const isLoad = update.transactions.some(t => t.annotation(isFileLoad));
+
+  if (update.docChanged && onDocChange && !isLoad) {
     onDocChange(update.state.doc.toString());
   }
   if ((update.docChanged || update.selectionSet) && onSelectionChange) {
@@ -3198,7 +3222,7 @@ git commit -m "feat(app): auto-save with 2-second debounce"
 Create `apps/desktop/src-tauri/src/recent_files.rs`:
 ```rust
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Manager};
 
 const MAX_RECENT: usize = 10;
@@ -3210,14 +3234,18 @@ fn get_recent_path(app: &AppHandle) -> PathBuf {
     data_dir.join(RECENT_FILE)
 }
 
-pub fn load_recent(app: &AppHandle) -> Vec<String> {
-    let path = get_recent_path(app);
+fn load_recent_from_path(path: &Path) -> Vec<String> {
     if path.exists() {
-        let data = fs::read_to_string(&path).unwrap_or_default();
+        let data = fs::read_to_string(path).unwrap_or_default();
         serde_json::from_str(&data).unwrap_or_default()
     } else {
         Vec::new()
     }
+}
+
+pub fn load_recent(app: &AppHandle) -> Vec<String> {
+    let path = get_recent_path(app);
+    load_recent_from_path(&path)
 }
 
 pub fn add_recent(app: &AppHandle, file_path: &str) {
@@ -3264,7 +3292,7 @@ export async function addToRecent(path: string): Promise<void> {
 }
 ```
 
-Call `addToRecent(result.path)` after opening a file in `App.svelte`.
+Call `addToRecent(result.path)` after opening a file in `App.svelte`. When Task 18 lands, make sure the Rust side refreshes the native `Open Recent` submenu after this mutation.
 
 - [ ] **Step 4: Commit**
 
@@ -3293,10 +3321,8 @@ await currentWindow.onDragDropEvent(async (event) => {
   if (event.payload.type === 'drop') {
     const paths = event.payload.paths;
     if (paths.length > 0 && paths[0].match(/\.(md|markdown|mdx)$/)) {
-      const result = await invoke<FileData>('open_file', { path: paths[0] });
-      fileState.setFile(result.path, result.filename, result.content);
-      editor.setContent(result.content);
-      addToRecent(result.path);
+      await handleOpenPath(paths[0]);
+      await addToRecent(paths[0]);
     }
   }
 });
@@ -3384,19 +3410,42 @@ pub fn create_menu(app: &AppHandle) -> Result<Menu<Wry>, tauri::Error> {
 
 - [ ] **Step 2: Register menu and emit events to frontend**
 
-Update `lib.rs` to call `menu::create_menu` in setup, and emit menu-event to the frontend via `on_menu_event`.
+Update `lib.rs` to call `menu::create_menu` in setup, and emit a structured `menu-event` payload from `on_menu_event`.
+
+Requirements:
+- For top-level commands, emit `{ id: "new" }`, `{ id: "open" }`, etc.
+- For `recent_*` menu IDs, resolve the selected recent item to its absolute path in Rust and emit `{ id: "recent_open", path }`.
+- Add a `menu::refresh_menu(app)` helper and call it after any recent-files mutation so the native `Open Recent` submenu stays current.
 
 - [ ] **Step 3: Listen for menu events in App.svelte**
 
 ```typescript
 import { listen } from '@tauri-apps/api/event';
 
-await listen<string>('menu-event', (event) => {
-  switch (event.payload) {
-    case 'new': fileState.reset(); editor.setContent(''); break;
-    case 'open': handleOpen(); break;
-    case 'save': handleSave(); break;
-    case 'save_as': handleSaveAs(); break;
+interface MenuEventPayload {
+  id: 'new' | 'open' | 'save' | 'save_as' | 'recent_open';
+  path?: string;
+}
+
+await listen<MenuEventPayload>('menu-event', async (event) => {
+  switch (event.payload.id) {
+    case 'new':
+      await handleNew();
+      break;
+    case 'open':
+      await handleOpen();
+      break;
+    case 'save':
+      await handleSave();
+      break;
+    case 'save_as':
+      await handleSaveAs();
+      break;
+    case 'recent_open':
+      if (event.payload.path) {
+        await handleOpenPath(event.payload.path);
+      }
+      break;
   }
 });
 ```
@@ -3542,7 +3591,7 @@ Check latest Tauri 2 docs. Add to `tauri.conf.json` under `bundle`:
 
 - [ ] **Step 2: Handle file-open events from OS**
 
-In Rust, handle the file-open event and emit to frontend. In Svelte, listen and open the file.
+In Rust, handle the file-open event and emit the absolute path to the frontend. In Svelte, listen and call `handleOpenPath(path)` so file-association opens reuse the same unsaved-change guards and annotated `loadFile()` path as normal open, drag-drop, and Open Recent.
 
 - [ ] **Step 3: Test with a production build**
 
@@ -3694,15 +3743,14 @@ git commit -m "feat: verify search/replace and native spellcheck"
 
 - [ ] **Step 1: Audit capabilities**
 
-Review `capabilities/default.json`. It should contain ONLY:
+Review `capabilities/default.json`. It must match Task 4 exactly. The default target is:
 ```json
 "permissions": [
-  "core:default",
-  "dialog:default",
-  "dialog:allow-open",
-  "dialog:allow-save"
+  "core:default"
 ]
 ```
+
+If the latest Tauri 2 docs explicitly require dialog permissions even for Rust-side plugin usage, add only the minimum dialog permissions and update Task 4 to the same list in the same change. The two tasks must not diverge.
 
 There must be NO `fs:*` permissions. All filesystem access goes through explicit Rust commands.
 
@@ -3787,11 +3835,11 @@ async fn test_open_binary_file_returns_error() {
 
 - [ ] **Step 2: Unsaved-change guards on all destructive actions**
 
-`confirmDiscard()` is already added in Task 4's App.svelte. Ensure it is called before:
+`confirmDiscard()` is already added in Task 4's App.svelte. It now delegates to Rust's native `confirm_discard` dialog and returns `true` only for successful Save or explicit Don't Save. Ensure it is called before:
 - **Open** (`handleOpen`) — already done in Task 4
 - **New** (`handleNew`) — already done in Task 4
-- **Drag-and-drop** — update Task 17's drop handler to call `confirmDiscard()` before loading
-- **File association open** — update Task 21's event handler to call `confirmDiscard()` before loading
+- **Drag-and-drop** — handled by routing Task 17 through `handleOpenPath()`
+- **File association open** — handled by routing Task 21 through `handleOpenPath()`
 - **Quit** — add a `beforeunload` handler or Tauri window close event:
 
 ```typescript
@@ -3802,8 +3850,8 @@ const currentWindow = getCurrentWindow();
 await currentWindow.onCloseRequested(async (event) => {
   if (fileState.isDirty) {
     event.preventDefault();
-    const saved = await confirmDiscard();
-    if (saved) {
+    const allowClose = await confirmDiscard();
+    if (allowClose) {
       await currentWindow.destroy();
     }
   }
@@ -3869,24 +3917,22 @@ pub fn save(app: &AppHandle, state: &WindowState) {
 
 In `lib.rs`, restore window state on startup and save on close. Check Tauri 2 docs for the window position/size APIs.
 
-- [ ] **Step 3: Handle corrupted recent files gracefully**
+- [ ] **Step 5: Handle corrupted recent files gracefully**
 
 In `recent_files.rs`, the `load_recent` function already returns an empty vec on parse failure. Add a test:
 ```rust
 #[test]
 fn test_corrupted_recent_file_returns_empty() {
-    // Write garbage to the recent files location
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("recent_files.json");
     std::fs::write(&path, "not json{{{").unwrap();
 
-    let data = std::fs::read_to_string(&path).unwrap();
-    let result: Vec<String> = serde_json::from_str(&data).unwrap_or_default();
+    let result = load_recent_from_path(&path);
     assert!(result.is_empty());
 }
 ```
 
-- [ ] **Step 4: Verify dirty flag consistency**
+- [ ] **Step 6: Verify dirty flag consistency**
 
 Manual test checklist:
 1. Open a file — status bar shows "Saved" (not "Unsaved")
@@ -3896,7 +3942,7 @@ Manual test checklist:
 5. Type rapidly for 5 seconds — status bar shows "Unsaved" throughout, then "Saved" 2s after stopping
 6. Open a new file while editing — status bar shows "Saved" for the new file
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add -A

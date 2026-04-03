@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { createEditor, loadEditorContent, type CursorInfo } from '@mdedit/core';
+  import { createEditor, loadEditorContent, setImageBasePath, type CursorInfo } from '@mdedit/core';
 
   let { onDocChange, onSelectionChange }: {
     onDocChange?: (content: string) => void;
@@ -28,6 +28,13 @@
   export function loadFile(content: string) {
     if (view) {
       loadEditorContent(view, content);
+    }
+  }
+
+  /** Update the base directory used to resolve relative image paths. */
+  export function setFileBasePath(basePath: string) {
+    if (view) {
+      setImageBasePath(view, basePath);
     }
   }
 

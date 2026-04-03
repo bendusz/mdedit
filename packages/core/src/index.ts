@@ -4,6 +4,7 @@ export {
   isFileLoad,
   loadEditorContent,
   setEditorTheme,
+  setImageBasePath,
   type EditorConfig,
   type LineSeparator,
 } from './editor';

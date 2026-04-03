@@ -10,11 +10,13 @@ import {
 } from '@codemirror/language';
 import { search, searchKeymap } from '@codemirror/search';
 import { livePreview } from './extensions/live-preview';
+import { imageBasePath } from './extensions/image-widget';
 import { markdownKeybindings } from './toolbar/keybindings';
 import { getCursorInfo, type CursorInfo } from './observers';
 import { lightTheme, darkTheme } from './theme';
 
 const themeCompartment = new Compartment();
+const imageBasePathCompartment = new Compartment();
 
 export type LineSeparator = '\n' | '\r\n';
 
@@ -22,6 +24,7 @@ export interface EditorConfig {
   parent: HTMLElement;
   content: string;
   dark?: boolean;
+  imageBasePath?: string;
   onDocChange?: (content: string) => void;
   onSelectionChange?: (info: CursorInfo) => void;
 }
@@ -48,8 +51,14 @@ export function setEditorTheme(view: EditorView, dark: boolean) {
   });
 }
 
+export function setImageBasePath(view: EditorView, basePath: string) {
+  view.dispatch({
+    effects: imageBasePathCompartment.reconfigure(imageBasePath.of(basePath)),
+  });
+}
+
 export function createEditor(config: EditorConfig): EditorView {
-  const { parent, content, dark, onDocChange, onSelectionChange } = config;
+  const { parent, content, dark, imageBasePath: basePath = '', onDocChange, onSelectionChange } = config;
 
   const updateListener = EditorView.updateListener.of((update) => {
     if (update.docChanged && onDocChange) {
@@ -75,6 +84,7 @@ export function createEditor(config: EditorConfig): EditorView {
       keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
       ...livePreview(),
       themeCompartment.of(dark ? darkTheme : lightTheme),
+      imageBasePathCompartment.of(imageBasePath.of(basePath)),
       updateListener,
       EditorView.lineWrapping,
       EditorView.contentAttributes.of({ spellcheck: 'true' }),
