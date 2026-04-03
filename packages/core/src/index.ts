@@ -30,7 +30,7 @@ export { getCursorInfo, type CursorInfo } from './observers';
 
 export { EditorView } from '@codemirror/view';
 
-export { livePreview, FrontmatterExtension, mermaidWidget, mathWidget } from './extensions/live-preview';
+export { livePreview, FrontmatterExtension, mermaidWidget, mathWidget, footnoteDecoration, footnoteStyles } from './extensions/live-preview';
 export { clearMermaidCache, mermaidDarkMode } from './extensions/mermaid-widget';
 export { clearMathCache } from './extensions/math-widget';
 

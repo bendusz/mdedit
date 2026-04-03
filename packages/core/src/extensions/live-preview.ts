@@ -13,6 +13,7 @@ import { tableWidget } from './table-widget';
 import { frontmatterDecoration, frontmatterStyles } from './frontmatter-decoration';
 import { mermaidWidget } from './mermaid-widget';
 import { mathWidget } from './math-widget';
+import { footnoteDecoration, footnoteStyles } from './footnote-decoration';
 
 export { headingDecoration } from './heading-decoration';
 export { inlineDecoration, inlineStyles } from './inline-decoration';
@@ -28,6 +29,7 @@ export { frontmatterDecoration, frontmatterStyles } from './frontmatter-decorati
 export { FrontmatterExtension } from './frontmatter-parser';
 export { mermaidWidget } from './mermaid-widget';
 export { mathWidget } from './math-widget';
+export { footnoteDecoration, footnoteStyles } from './footnote-decoration';
 
 const headingStyles = EditorView.baseTheme({
   '.cm-heading-1': { fontSize: '2em', fontWeight: '700', lineHeight: '1.2' },
@@ -63,5 +65,7 @@ export function livePreview(): Extension[] {
     frontmatterStyles,
     mermaidWidget,
     mathWidget,
+    footnoteDecoration,
+    footnoteStyles,
   ];
 }

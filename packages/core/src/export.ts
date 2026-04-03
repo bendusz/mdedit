@@ -1,4 +1,5 @@
 import { Marked } from 'marked';
+import markedFootnote from 'marked-footnote';
 
 const htmlTemplate = (body: string): string => `<!DOCTYPE html>
 <html lang="en">
@@ -120,6 +121,39 @@ const htmlTemplate = (body: string): string => `<!DOCTYPE html>
 
   del { text-decoration: line-through; }
 
+  /* Footnotes */
+  .footnotes {
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid #e1e4e8;
+    font-size: 0.875em;
+    color: #57606a;
+  }
+
+  .footnotes ol {
+    padding-left: 1.5em;
+  }
+
+  .footnotes li {
+    margin-bottom: 8px;
+  }
+
+  sup a {
+    color: #0366d6;
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  sup a:hover {
+    text-decoration: underline;
+  }
+
+  .footnote-backref {
+    color: #0366d6;
+    text-decoration: none;
+    margin-left: 4px;
+  }
+
   input[type="checkbox"] {
     margin: 0 0.2em 0.25em -1.4em;
     vertical-align: middle;
@@ -204,10 +238,11 @@ ${body}
 </body>
 </html>`;
 
-/** Create a configured Marked instance with GFM support. */
+/** Create a configured Marked instance with GFM and footnote support. */
 function createMarkedInstance(): Marked {
   const instance = new Marked();
   instance.use({ gfm: true, breaks: false });
+  instance.use(markedFootnote());
   return instance;
 }
 

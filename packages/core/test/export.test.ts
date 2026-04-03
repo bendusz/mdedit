@@ -150,4 +150,10 @@ describe('markdownToHtml', () => {
     const html = markdownToHtml('test');
     expect(html).toContain('max-width: none');
   });
+
+  it('should render footnotes in exported HTML', () => {
+    const html = markdownToHtml('Text[^1].\n\n[^1]: Note.');
+    expect(html).toMatch(/<section[^>]*class="footnotes"/);
+    expect(html).toMatch(/<sup/);
+  });
 });
