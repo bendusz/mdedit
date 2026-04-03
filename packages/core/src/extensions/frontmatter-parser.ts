@@ -9,6 +9,11 @@ import type { BlockParser, MarkdownConfig, Line, BlockContext } from '@lezer/mar
  * - FrontmatterBlock — the entire frontmatter (opening ---, content, closing ---)
  * - FrontmatterMarker — each `---` delimiter line
  * - FrontmatterContent — the YAML content between delimiters
+ *
+ * IMPORTANT: This parser pre-scans the document text to find the closing
+ * delimiter BEFORE calling cx.nextLine(). Calling cx.nextLine() and then
+ * returning false violates the Lezer block parser contract — consumed lines
+ * would vanish from the parse tree.
  */
 
 const frontmatterParser: BlockParser = {
@@ -26,40 +31,38 @@ const frontmatterParser: BlockParser = {
     const openStart = cx.lineStart;
     const openEnd = cx.lineStart + line.text.length;
 
-    // Move past the opening delimiter
-    if (!cx.nextLine()) return false;
+    // Pre-scan: search the document text for a closing `---` without
+    // calling cx.nextLine(), which would consume lines irreversibly.
+    const docText = cx.input.read(openEnd, cx.input.length);
+    const closingIndex = findClosingDelimiter(docText);
+    if (closingIndex === -1) return false;
 
-    // Accumulate content lines until we find the closing `---`
-    const contentStart = cx.lineStart;
-    let contentEnd = contentStart;
-    let foundClose = false;
-    let closeStart = 0;
-    let closeEnd = 0;
+    // We confirmed a valid frontmatter block exists. Now consume lines
+    // with cx.nextLine() to build the tree nodes.
+    const contentStart = openEnd + 1; // +1 for the newline after opening ---
+    const closeStart = openEnd + closingIndex;
+    const closeLine = docText.substring(closingIndex).split('\n')[0];
+    const closeEnd = closeStart + closeLine.length;
 
-    // eslint-disable-next-line no-constant-condition
-    while (true) {
-      const trimmed = line.text.trim();
-      if (trimmed === '---') {
-        foundClose = true;
-        closeStart = cx.lineStart;
-        closeEnd = cx.lineStart + line.text.length;
-        cx.nextLine(); // Move past the closing delimiter
-        break;
-      }
-      contentEnd = cx.lineStart + line.text.length;
+    // Advance past the opening delimiter
+    cx.nextLine();
+
+    // Advance through content and closing delimiter lines
+    while (cx.lineStart < closeEnd) {
       if (!cx.nextLine()) break;
     }
-
-    // If no closing delimiter found, this is not valid frontmatter
-    if (!foundClose) return false;
+    // Move past the closing delimiter line
+    cx.nextLine();
 
     // Build the syntax tree elements
     const children = [
       cx.elt('FrontmatterMarker', openStart, openEnd),
     ];
 
-    if (contentEnd > contentStart) {
-      children.push(cx.elt('FrontmatterContent', contentStart, contentEnd));
+    // Content exists between the opening delimiter and closing delimiter
+    // (excluding the newlines immediately after/before delimiters)
+    if (closeStart > contentStart) {
+      children.push(cx.elt('FrontmatterContent', contentStart, closeStart - 1));
     }
 
     children.push(cx.elt('FrontmatterMarker', closeStart, closeEnd));
@@ -68,6 +71,29 @@ const frontmatterParser: BlockParser = {
     return true;
   },
 };
+
+/**
+ * Search for a closing `---` delimiter in the text after the opening `---`.
+ * Returns the character offset within the text, or -1 if not found.
+ * The closing `---` must be on its own line (trimmed).
+ */
+function findClosingDelimiter(text: string): number {
+  let pos = 0;
+  while (pos < text.length) {
+    // Find next newline to get a line
+    const nlIndex = text.indexOf('\n', pos);
+    const lineEnd = nlIndex === -1 ? text.length : nlIndex;
+    const lineText = text.substring(pos, lineEnd).trim();
+
+    if (lineText === '---') {
+      return pos;
+    }
+
+    if (nlIndex === -1) break;
+    pos = nlIndex + 1;
+  }
+  return -1;
+}
 
 /** @lezer/markdown extension that enables YAML frontmatter parsing. */
 export const FrontmatterExtension: MarkdownConfig = {

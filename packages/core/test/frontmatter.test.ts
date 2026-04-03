@@ -76,6 +76,8 @@ describe('frontmatter parser', () => {
 
     const names = getNodeNames(view);
     expect(names).not.toContain('FrontmatterBlock');
+    // Verify the rest of the document is still parsed correctly
+    expect(names).toContain('ATXHeading1');
   });
 
   it('should handle empty frontmatter', () => {
