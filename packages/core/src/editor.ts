@@ -10,6 +10,7 @@ import {
 } from '@codemirror/language';
 import { search, searchKeymap } from '@codemirror/search';
 import { livePreview } from './extensions/live-preview';
+import { markdownKeybindings } from './toolbar/keybindings';
 
 export type LineSeparator = '\n' | '\r\n';
 
@@ -55,6 +56,7 @@ export function createEditor(config: EditorConfig): EditorView {
       syntaxHighlighting(defaultHighlightStyle),
       bracketMatching(),
       search(),
+      keymap.of(markdownKeybindings),
       keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
       ...livePreview(),
       updateListener,

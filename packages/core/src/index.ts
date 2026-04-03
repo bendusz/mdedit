@@ -22,3 +22,5 @@ export {
   insertHorizontalRule,
   insertTable,
 } from './toolbar/commands';
+
+export { markdownKeybindings } from './toolbar/keybindings';
