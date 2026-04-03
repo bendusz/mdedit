@@ -58,6 +58,17 @@ function processInlineNode(
       const childRule = ruleByNodeName.get(child.name);
       if (childRule) {
         processInlineNode(child, childRule, cursorLines, state, decorations);
+      } else {
+        // Recurse into non-format children (e.g., Link nodes) to find
+        // nested emphasis like [**bold link**](url)
+        let grandchild = child.firstChild;
+        while (grandchild) {
+          const gcRule = ruleByNodeName.get(grandchild.name);
+          if (gcRule) {
+            processInlineNode(grandchild, gcRule, cursorLines, state, decorations);
+          }
+          grandchild = grandchild.nextSibling;
+        }
       }
     }
     child = child.nextSibling;
@@ -82,10 +93,11 @@ function buildInlineDecorations(state: EditorState): DecorationSet {
       const rule = ruleByNodeName.get(node.name);
       if (!rule) return;
 
-      // Check if the node is on a cursor line
-      const nodeLine = state.doc.lineAt(node.from).number;
-      if (cursorLines.has(nodeLine)) {
-        return false;
+      // Check if ANY line spanned by this node is a cursor line
+      const startLine = state.doc.lineAt(node.from).number;
+      const endLine = state.doc.lineAt(node.to).number;
+      for (let l = startLine; l <= endLine; l++) {
+        if (cursorLines.has(l)) return false;
       }
 
       processInlineNode(node.node, rule, cursorLines, state, decorations);
