@@ -208,4 +208,26 @@ mod tests {
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Path must be absolute"));
     }
+
+    #[test]
+    fn test_open_binary_file_returns_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("binary.md");
+        fs::write(&file_path, b"\xff\xfe invalid utf8").unwrap();
+        let result = open_file(file_path.to_string_lossy().to_string());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Failed to read file"));
+    }
+
+    #[test]
+    fn test_path_traversal_rejected() {
+        // Relative path with .. is rejected (not absolute)
+        let result = open_file("../etc/passwd".to_string());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Path must be absolute"));
+
+        let result = save_file("../etc/evil.md".to_string(), "content".to_string());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Path must be absolute"));
+    }
 }
