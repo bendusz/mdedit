@@ -9,6 +9,7 @@ import { blockquoteDecoration, blockquoteStyles } from './blockquote-decoration'
 import { hrDecoration, hrStyles } from './hr-decoration';
 import { listDecoration, listStyles } from './list-decoration';
 import { tableDecoration, tableStyles } from './table-decoration';
+import { frontmatterDecoration, frontmatterStyles } from './frontmatter-decoration';
 
 export { headingDecoration } from './heading-decoration';
 export { inlineDecoration, inlineStyles } from './inline-decoration';
@@ -19,6 +20,8 @@ export { blockquoteDecoration, blockquoteStyles } from './blockquote-decoration'
 export { hrDecoration, hrStyles } from './hr-decoration';
 export { listDecoration, listStyles } from './list-decoration';
 export { tableDecoration, tableStyles } from './table-decoration';
+export { frontmatterDecoration, frontmatterStyles } from './frontmatter-decoration';
+export { FrontmatterExtension } from './frontmatter-parser';
 
 const headingStyles = EditorView.baseTheme({
   '.cm-heading-1': { fontSize: '2em', fontWeight: '700', lineHeight: '1.2' },
@@ -49,5 +52,7 @@ export function livePreview(): Extension[] {
     listStyles,
     tableDecoration,
     tableStyles,
+    frontmatterDecoration,
+    frontmatterStyles,
   ];
 }

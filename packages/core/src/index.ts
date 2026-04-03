@@ -15,7 +15,7 @@ export { getCursorInfo, type CursorInfo } from './observers';
 
 export { type EditorView } from '@codemirror/view';
 
-export { livePreview } from './extensions/live-preview';
+export { livePreview, FrontmatterExtension } from './extensions/live-preview';
 
 export {
   toggleBold,
