@@ -3,6 +3,7 @@ export {
   detectLineSeparator,
   isFileLoad,
   loadEditorContent,
+  setContentWidth,
   setEditorTheme,
   setImageBasePath,
   type EditorConfig,

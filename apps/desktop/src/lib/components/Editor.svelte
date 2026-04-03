@@ -2,9 +2,10 @@
   import { onMount, onDestroy } from 'svelte';
   import { createEditor, loadEditorContent, setImageBasePath, type CursorInfo } from '@mdedit/core';
 
-  let { onDocChange, onSelectionChange }: {
+  let { onDocChange, onSelectionChange, contentWidth }: {
     onDocChange?: (content: string) => void;
     onSelectionChange?: (info: CursorInfo) => void;
+    contentWidth?: string;
   } = $props();
 
   let container: HTMLElement;
@@ -14,6 +15,7 @@
     view = createEditor({
       parent: container,
       content: '# Welcome to mdedit\n\nStart typing your markdown here.',
+      contentWidth,
       onDocChange,
       onSelectionChange,
     });
@@ -62,7 +64,6 @@
 
   .editor-container :global(.cm-content) {
     padding: 16px 24px;
-    max-width: 80ch;
     margin: 0 auto;
   }
 </style>

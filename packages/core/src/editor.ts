@@ -17,6 +17,7 @@ import { lightTheme, darkTheme } from './theme';
 
 const themeCompartment = new Compartment();
 const imageBasePathCompartment = new Compartment();
+const contentWidthCompartment = new Compartment();
 
 export type LineSeparator = '\n' | '\r\n';
 
@@ -25,6 +26,7 @@ export interface EditorConfig {
   content: string;
   dark?: boolean;
   imageBasePath?: string;
+  contentWidth?: string;
   onDocChange?: (content: string) => void;
   onSelectionChange?: (info: CursorInfo) => void;
 }
@@ -57,8 +59,20 @@ export function setImageBasePath(view: EditorView, basePath: string) {
   });
 }
 
+function contentWidthTheme(width: string) {
+  return EditorView.theme({
+    '.cm-content': { maxWidth: width },
+  });
+}
+
+export function setContentWidth(view: EditorView, width: string) {
+  view.dispatch({
+    effects: contentWidthCompartment.reconfigure(contentWidthTheme(width)),
+  });
+}
+
 export function createEditor(config: EditorConfig): EditorView {
-  const { parent, content, dark, imageBasePath: basePath = '', onDocChange, onSelectionChange } = config;
+  const { parent, content, dark, imageBasePath: basePath = '', contentWidth = '80ch', onDocChange, onSelectionChange } = config;
 
   const updateListener = EditorView.updateListener.of((update) => {
     if (update.docChanged && onDocChange) {
@@ -85,6 +99,7 @@ export function createEditor(config: EditorConfig): EditorView {
       ...livePreview(),
       themeCompartment.of(dark ? darkTheme : lightTheme),
       imageBasePathCompartment.of(imageBasePath.of(basePath)),
+      contentWidthCompartment.of(contentWidthTheme(contentWidth)),
       updateListener,
       EditorView.lineWrapping,
       EditorView.contentAttributes.of({ spellcheck: 'true' }),

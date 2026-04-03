@@ -16,7 +16,8 @@
   } from '$lib/tauri/fileOps';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { listen } from '@tauri-apps/api/event';
-  import { setEditorTheme, type CursorInfo } from '@mdedit/core';
+  import { setEditorTheme, setContentWidth, type CursorInfo } from '@mdedit/core';
+  import { contentWidthState } from '$lib/stores/contentWidth.svelte';
 
   let editor: Editor;
   let cursorLine = $state(1);
@@ -206,6 +207,14 @@
     }
   });
 
+  $effect(() => {
+    const width = contentWidthState.width;
+    const view = getEditorView();
+    if (view) {
+      setContentWidth(view, width);
+    }
+  });
+
   /** Open a Rust-owned external file payload, used by drag-drop and file association. */
   async function handleOpenExternalFile(data: FileData) {
     if (!(await saveCurrentDocumentBeforeSwitch())) {
@@ -292,8 +301,8 @@
 
 <main class="app">
   <Toolbar {getEditorView} />
-  <Editor bind:this={editor} {onDocChange} {onSelectionChange} />
-  <StatusBar line={cursorLine} col={cursorCol} {wordCount} isDirty={fileState.isDirty} />
+  <Editor bind:this={editor} {onDocChange} {onSelectionChange} contentWidth={contentWidthState.width} />
+  <StatusBar line={cursorLine} col={cursorCol} {wordCount} isDirty={fileState.isDirty} contentWidth={contentWidthState.width} onContentWidthChange={(w) => contentWidthState.setWidth(w)} />
 </main>
 
 <style>
