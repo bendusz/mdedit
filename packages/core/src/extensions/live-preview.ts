@@ -1,8 +1,10 @@
 import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { headingDecoration } from './heading-decoration';
+import { inlineDecoration, inlineStyles } from './inline-decoration';
 
 export { headingDecoration } from './heading-decoration';
+export { inlineDecoration, inlineStyles } from './inline-decoration';
 
 const headingStyles = EditorView.baseTheme({
   '.cm-heading-1': { fontSize: '2em', fontWeight: '700', lineHeight: '1.2' },
@@ -15,5 +17,5 @@ const headingStyles = EditorView.baseTheme({
 
 /** Returns all live-preview extensions (heading decorations, styles, etc.). */
 export function livePreview(): Extension[] {
-  return [headingDecoration, headingStyles];
+  return [headingDecoration, headingStyles, inlineDecoration, inlineStyles];
 }
