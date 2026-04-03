@@ -7,6 +7,8 @@ export {
   type LineSeparator,
 } from './editor';
 
+export { type EditorView } from '@codemirror/view';
+
 export { livePreview } from './extensions/live-preview';
 
 export {

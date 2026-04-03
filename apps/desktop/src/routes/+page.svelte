@@ -1,10 +1,15 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import Editor from '$lib/components/Editor.svelte';
+  import Toolbar from '$lib/components/Toolbar.svelte';
   import { fileState } from '$lib/stores/fileState.svelte';
   import { openFileDialog, saveFile, saveFileAsDialog } from '$lib/tauri/fileOps';
 
   let editor: Editor;
+
+  function getEditorView() {
+    return editor?.getView();
+  }
 
   function onDocChange(content: string) {
     fileState.setContent(content);
@@ -89,6 +94,7 @@
 </script>
 
 <main class="app">
+  <Toolbar {getEditorView} />
   <Editor bind:this={editor} {onDocChange} />
 </main>
 
