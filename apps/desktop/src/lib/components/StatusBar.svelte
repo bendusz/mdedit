@@ -1,10 +1,19 @@
 <script lang="ts">
-  let { line, col, wordCount, isDirty }: {
+  import { widthPresets } from '$lib/stores/contentWidth.svelte';
+
+  let { line, col, wordCount, isDirty, contentWidth, onContentWidthChange }: {
     line: number;
     col: number;
     wordCount: number;
     isDirty: boolean;
+    contentWidth: string;
+    onContentWidthChange: (width: string) => void;
   } = $props();
+
+  function handleWidthChange(e: Event) {
+    const select = e.target as HTMLSelectElement;
+    onContentWidthChange(select.value);
+  }
 </script>
 
 <div class="status-bar">
@@ -14,6 +23,12 @@
     <span>{wordCount} words</span>
   </div>
   <div class="status-right">
+    <select class="width-select" value={contentWidth} onchange={handleWidthChange}>
+      {#each widthPresets as preset}
+        <option value={preset.value}>{preset.label}</option>
+      {/each}
+    </select>
+    <span class="sep">|</span>
     <span>UTF-8</span>
     <span class="sep">|</span>
     <span class:unsaved={isDirty}>{isDirty ? 'Unsaved' : 'Saved'}</span>
@@ -47,5 +62,16 @@
 
   .unsaved {
     color: var(--unsaved-fg);
+  }
+
+  .width-select {
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-size: inherit;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 0 2px;
+    outline: none;
   }
 </style>
