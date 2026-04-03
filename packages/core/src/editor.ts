@@ -9,6 +9,7 @@ import {
   bracketMatching,
 } from '@codemirror/language';
 import { search, searchKeymap } from '@codemirror/search';
+import { livePreview } from './extensions/live-preview';
 
 export type LineSeparator = '\n' | '\r\n';
 
@@ -55,6 +56,7 @@ export function createEditor(config: EditorConfig): EditorView {
       bracketMatching(),
       search(),
       keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+      ...livePreview(),
       updateListener,
       EditorView.lineWrapping,
     ],
