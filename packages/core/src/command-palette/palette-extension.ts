@@ -78,9 +78,16 @@ function createPalettePanel(view: EditorView): Panel {
   input.placeholder = 'Type a command...';
   input.setAttribute('autocomplete', 'off');
   input.setAttribute('spellcheck', 'false');
+  input.setAttribute('role', 'combobox');
+  input.setAttribute('aria-expanded', 'true');
+  input.setAttribute('aria-autocomplete', 'list');
+  input.setAttribute('aria-haspopup', 'listbox');
+  input.setAttribute('aria-controls', 'cm-palette-results');
 
   const resultsList = document.createElement('ul');
   resultsList.className = 'cm-command-palette-results';
+  resultsList.setAttribute('role', 'listbox');
+  resultsList.id = 'cm-palette-results';
 
   container.appendChild(input);
   container.appendChild(resultsList);
@@ -116,9 +123,14 @@ function createPalettePanel(view: EditorView): Panel {
       return;
     }
 
+    input.setAttribute('aria-activedescendant', `cm-palette-option-${selectedIndex}`);
+
     filteredCommands.forEach((cmd, i) => {
       const li = document.createElement('li');
       li.className = 'cm-command-palette-item';
+      li.id = `cm-palette-option-${i}`;
+      li.setAttribute('role', 'option');
+      li.setAttribute('aria-selected', i === selectedIndex ? 'true' : 'false');
       if (i === selectedIndex) {
         li.classList.add('cm-command-palette-item-selected');
       }
@@ -210,10 +222,11 @@ function createPalettePanel(view: EditorView): Panel {
   // Initial render
   renderResults();
 
-  // Focus input after the panel is mounted
-  requestAnimationFrame(() => input.focus());
-
-  return { dom, top: true };
+  return {
+    dom,
+    top: true,
+    mount() { input.focus(); },
+  };
 }
 
 /** Base theme for the command palette. */
