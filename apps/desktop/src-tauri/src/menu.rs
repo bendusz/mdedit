@@ -13,6 +13,12 @@ pub fn setup_menu(app: &App) -> Result<(), Box<dyn std::error::Error>> {
                 .build(app)?,
         )
         .separator()
+        .item(
+            &MenuItemBuilder::with_id("export_html", "Export to HTML...")
+                .accelerator("CmdOrCtrl+Shift+E")
+                .build(app)?,
+        )
+        .separator()
         .close_window()
         .build()?;
 
@@ -35,7 +41,7 @@ pub fn setup_menu(app: &App) -> Result<(), Box<dyn std::error::Error>> {
     app.on_menu_event(move |app_handle, event| {
         let id = event.id().0.as_str();
         match id {
-            "new" | "open" | "save" | "save_as" => {
+            "new" | "open" | "save" | "save_as" | "export_html" => {
                 let _ = app_handle.emit("menu-event", id);
             }
             _ => {}

@@ -44,3 +44,5 @@ export { defaultCommands, filterCommands, type PaletteCommand } from './command-
 
 export { getOutline, type OutlineEntry } from './outline';
 
+export { markdownToHtml } from './export';
+

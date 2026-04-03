@@ -19,7 +19,8 @@
     "@codemirror/state": "^6",
     "@codemirror/view": "^6",
     "@lezer/common": "^1",
-    "@lezer/markdown": "^1"
+    "@lezer/markdown": "^1",
+    "marked": "^17.0.5"
   },
   "devDependencies": {
     "jsdom": "^26",

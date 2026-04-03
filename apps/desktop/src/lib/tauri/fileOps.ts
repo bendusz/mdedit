@@ -40,3 +40,8 @@ export function getRecentFiles(): Promise<string[]> {
 export function addToRecent(path: string): Promise<void> {
   return invoke('add_to_recent', { path });
 }
+
+/** Show native save dialog with HTML filter, write HTML content, return saved path or null. */
+export function exportHtmlDialog(htmlContent: string): Promise<string | null> {
+  return invoke<string | null>('export_html_dialog', { htmlContent });
+}

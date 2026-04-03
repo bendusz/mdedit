@@ -9,6 +9,7 @@
     acceptPendingFile,
     addToRecent,
     clearCurrentFile,
+    exportHtmlDialog,
     openFileDialog,
     saveCurrentFile,
     saveFileAsDialog,
@@ -16,7 +17,7 @@
   } from '$lib/tauri/fileOps';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { listen } from '@tauri-apps/api/event';
-  import { setEditorTheme, setContentWidth, registerPaletteCommands, getOutline, type CursorInfo, type PaletteCommand, type OutlineEntry } from '@mdedit/core';
+  import { setEditorTheme, setContentWidth, registerPaletteCommands, getOutline, markdownToHtml, type CursorInfo, type PaletteCommand, type OutlineEntry } from '@mdedit/core';
   import { EditorView } from '@mdedit/core';
   import OutlineSidebar from '$lib/components/OutlineSidebar.svelte';
   import { contentWidthState } from '$lib/stores/contentWidth.svelte';
@@ -191,6 +192,15 @@
     }
   }
 
+  async function handleExportHtml() {
+    try {
+      const html = markdownToHtml(fileState.content);
+      await exportHtmlDialog(html);
+    } catch (e) {
+      console.error('Failed to export HTML:', e);
+    }
+  }
+
   async function handleNew() {
     if (!(await saveCurrentDocumentBeforeSwitch())) {
       return;
@@ -210,7 +220,10 @@
   function handleKeydown(e: KeyboardEvent) {
     const mod = e.metaKey || e.ctrlKey;
     const key = e.key.toLowerCase();
-    if (mod && e.shiftKey && key === 'o') {
+    if (mod && e.shiftKey && key === 'e') {
+      e.preventDefault();
+      void handleExportHtml();
+    } else if (mod && e.shiftKey && key === 'o') {
       e.preventDefault();
       toggleOutline();
     } else if (mod && e.shiftKey && key === 's') {
@@ -285,6 +298,7 @@
         { id: 'file-open', label: 'Open File', category: 'File', shortcut: '\u2318O', execute: () => { void handleOpen(); } },
         { id: 'file-save', label: 'Save', category: 'File', shortcut: '\u2318S', execute: () => { void handleSave(); } },
         { id: 'file-save-as', label: 'Save As...', category: 'File', shortcut: '\u2318\u21E7S', execute: () => { void handleSaveAs(); } },
+        { id: 'file-export-html', label: 'Export to HTML', category: 'File', shortcut: '\u2318\u21E7E', execute: () => { void handleExportHtml(); } },
         { id: 'view-toggle-outline', label: 'Toggle Outline', category: 'View', shortcut: '\u2318\u21E7O', execute: () => { toggleOutline(); } },
       ];
       registerPaletteCommands(view, appCommands);
@@ -297,6 +311,7 @@
         case 'open': void handleOpen(); break;
         case 'save': void handleSave(); break;
         case 'save_as': void handleSaveAs(); break;
+        case 'export_html': void handleExportHtml(); break;
       }
     });
 

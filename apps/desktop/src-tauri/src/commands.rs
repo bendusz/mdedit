@@ -203,6 +203,28 @@ pub fn clear_current_file(access: State<'_, FileAccessState>) {
 }
 
 #[tauri::command]
+pub async fn export_html_dialog(
+    app: AppHandle,
+    html_content: String,
+) -> Result<Option<String>, String> {
+    let file_path = app
+        .dialog()
+        .file()
+        .add_filter("HTML", &["html", "htm"])
+        .blocking_save_file();
+
+    match file_path {
+        Some(fp) => {
+            let path_buf = file_path_to_pathbuf(fp)?;
+            let path_str = path_buf.to_string_lossy().to_string();
+            atomic_write(&path_str, &html_content)?;
+            Ok(Some(path_str))
+        }
+        None => Ok(None),
+    }
+}
+
+#[tauri::command]
 pub async fn get_recent_files(app: AppHandle) -> Vec<String> {
     recent_files::load_recent(&app)
 }
