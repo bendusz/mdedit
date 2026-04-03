@@ -1,6 +1,9 @@
 mod commands;
+mod recent_files;
 
-use commands::{open_file, open_file_dialog, save_file, save_file_as_dialog};
+use commands::{
+    add_to_recent, get_recent_files, open_file, open_file_dialog, save_file, save_file_as_dialog,
+};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -12,6 +15,8 @@ pub fn run() {
             open_file_dialog,
             save_file,
             save_file_as_dialog,
+            get_recent_files,
+            add_to_recent,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

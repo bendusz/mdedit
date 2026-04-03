@@ -25,3 +25,13 @@ export function saveFile(path: string, content: string): Promise<void> {
 export function saveFileAsDialog(content: string): Promise<FileData | null> {
   return invoke<FileData | null>('save_file_as_dialog', { content });
 }
+
+/** Get the list of recently opened file paths. */
+export function getRecentFiles(): Promise<string[]> {
+  return invoke<string[]>('get_recent_files');
+}
+
+/** Add a file path to the recent files list. */
+export function addToRecent(path: string): Promise<void> {
+  return invoke('add_to_recent', { path });
+}

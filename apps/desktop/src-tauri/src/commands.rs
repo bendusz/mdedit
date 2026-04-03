@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 
+use crate::recent_files;
+
 #[derive(Debug, Serialize, Clone)]
 pub struct FileData {
     pub path: String,
@@ -123,6 +125,16 @@ pub async fn save_file_as_dialog(
         }
         None => Ok(None),
     }
+}
+
+#[tauri::command]
+pub async fn get_recent_files(app: AppHandle) -> Vec<String> {
+    recent_files::load_recent(&app)
+}
+
+#[tauri::command]
+pub async fn add_to_recent(app: AppHandle, path: String) {
+    recent_files::add_recent(&app, &path);
 }
 
 #[cfg(test)]

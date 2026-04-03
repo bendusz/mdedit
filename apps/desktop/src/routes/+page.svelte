@@ -4,7 +4,7 @@
   import Toolbar from '$lib/components/Toolbar.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
   import { fileState } from '$lib/stores/fileState.svelte';
-  import { openFileDialog, saveFile, saveFileAsDialog } from '$lib/tauri/fileOps';
+  import { openFileDialog, saveFile, saveFileAsDialog, addToRecent } from '$lib/tauri/fileOps';
   import type { CursorInfo } from '@mdedit/core';
 
   let editor: Editor;
@@ -50,6 +50,7 @@
       if (result) {
         fileState.setFile(result.path, result.filename, result.content);
         editor.loadFile(result.content);
+        addToRecent(result.path);
       }
     } catch (e) {
       console.error('Failed to open file:', e);
