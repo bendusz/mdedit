@@ -45,3 +45,18 @@ export function addToRecent(path: string): Promise<void> {
 export function exportHtmlDialog(htmlContent: string): Promise<string | null> {
   return invoke<string | null>('export_html_dialog', { htmlContent });
 }
+
+/** Save a pasted image (base64-encoded) to the given directory. Returns the saved filename. */
+export function savePastedImage(
+  imageBase64: string,
+  directory: string,
+  filename?: string,
+  mimeSubtype?: string,
+): Promise<string> {
+  return invoke<string>('save_pasted_image', {
+    imageBase64,
+    directory,
+    filename,
+    mimeSubtype,
+  });
+}

@@ -1,8 +1,11 @@
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine;
 use serde::Serialize;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::AppHandle;
 use tauri::State;
 use tauri_plugin_dialog::DialogExt;
@@ -224,6 +227,98 @@ pub async fn export_html_dialog(
     }
 }
 
+/// Atomic write for binary data: write to a temp file in the same directory, then rename.
+fn atomic_write_bytes(path: &str, data: &[u8]) -> Result<(), String> {
+    let p = Path::new(path);
+    if !p.is_absolute() {
+        return Err("Path must be absolute".into());
+    }
+    let parent = p
+        .parent()
+        .ok_or_else(|| "Cannot determine parent directory".to_string())?;
+    let mut temp = create_save_tempfile(parent)?;
+
+    temp.as_file_mut()
+        .write_all(data)
+        .map_err(|e| format!("Failed to write temp file: {e}"))?;
+
+    temp.persist(p)
+        .map_err(|e| format!("Failed to rename temp file: {e}"))?;
+
+    Ok(())
+}
+
+/// Map a MIME subtype to a file extension.
+fn extension_for_mime(mime_subtype: &str) -> &str {
+    match mime_subtype {
+        "png" => "png",
+        "jpeg" => "jpg",
+        "gif" => "gif",
+        "webp" => "webp",
+        _ => "png",
+    }
+}
+
+/// Generate a unique image filename based on the current timestamp.
+fn generate_image_filename(ext: &str) -> String {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("image-{nanos}.{ext}")
+}
+
+#[tauri::command]
+pub fn save_pasted_image(
+    directory: String,
+    image_base64: String,
+    filename: Option<String>,
+    mime_subtype: Option<String>,
+) -> Result<String, String> {
+    let dir = Path::new(&directory);
+    if !dir.is_absolute() {
+        return Err("Directory path must be absolute".into());
+    }
+    if !dir.is_dir() {
+        return Err("Directory does not exist".into());
+    }
+
+    let decoded = BASE64_STANDARD
+        .decode(&image_base64)
+        .map_err(|e| format!("Invalid base64 data: {e}"))?;
+
+    if decoded.is_empty() {
+        return Err("Image data is empty".into());
+    }
+
+    let ext = extension_for_mime(mime_subtype.as_deref().unwrap_or("png"));
+    let name = filename.unwrap_or_else(|| generate_image_filename(ext));
+
+    // Sanitize filename: keep only safe characters
+    let safe_name: String = name
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_' || *c == '.')
+        .collect();
+    if safe_name.is_empty() {
+        return Err("Invalid filename".into());
+    }
+
+    // Guard against "." / ".." — a safe filename must not be a path-special component.
+    if safe_name == "." || safe_name == ".." {
+        return Err("Invalid filename".into());
+    }
+    let file_path = dir.join(&safe_name);
+    // Confirm the resolved path is directly inside the target directory (no traversal).
+    if file_path.parent() != Some(dir) {
+        return Err("Invalid filename".into());
+    }
+    let file_path_str = file_path.to_string_lossy().to_string();
+
+    atomic_write_bytes(&file_path_str, &decoded)?;
+
+    Ok(safe_name)
+}
+
 #[tauri::command]
 pub async fn get_recent_files(app: AppHandle) -> Vec<String> {
     recent_files::load_recent(&app)
@@ -375,5 +470,169 @@ mod tests {
         assert!(result.is_err());
         assert_eq!(access.current_path(), None);
         assert!(access.accept_pending_path("/tmp/expected.md").is_ok());
+    }
+
+    // --- save_pasted_image tests ---
+
+    /// Minimal valid 1x1 PNG encoded as base64.
+    const TINY_PNG_BASE64: &str =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
+
+    #[test]
+    fn test_save_pasted_image_creates_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir_str = dir.path().to_string_lossy().to_string();
+
+        let result = save_pasted_image(
+            dir_str,
+            TINY_PNG_BASE64.to_string(),
+            Some("test-image.png".to_string()),
+            Some("png".to_string()),
+        );
+
+        assert!(result.is_ok());
+        let filename = result.unwrap();
+        assert_eq!(filename, "test-image.png");
+
+        let saved_path = dir.path().join("test-image.png");
+        assert!(saved_path.exists());
+
+        // Verify the content is valid PNG binary data (starts with PNG magic bytes)
+        let data = fs::read(&saved_path).unwrap();
+        assert!(data.len() > 8);
+        assert_eq!(&data[1..4], b"PNG");
+    }
+
+    #[test]
+    fn test_save_pasted_image_generates_unique_filename() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir_str = dir.path().to_string_lossy().to_string();
+
+        let name1 = save_pasted_image(
+            dir_str.clone(),
+            TINY_PNG_BASE64.to_string(),
+            None,
+            Some("png".to_string()),
+        )
+        .unwrap();
+
+        let name2 = save_pasted_image(
+            dir_str,
+            TINY_PNG_BASE64.to_string(),
+            None,
+            Some("png".to_string()),
+        )
+        .unwrap();
+
+        assert!(name1.starts_with("image-"));
+        assert!(name1.ends_with(".png"));
+        assert!(name2.starts_with("image-"));
+        assert!(name2.ends_with(".png"));
+        // Timestamps should produce different names
+        assert_ne!(name1, name2);
+    }
+
+    #[test]
+    fn test_save_pasted_image_rejects_relative_directory() {
+        let result = save_pasted_image(
+            "relative/path".to_string(),
+            TINY_PNG_BASE64.to_string(),
+            None,
+            None,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Directory path must be absolute"));
+    }
+
+    #[test]
+    fn test_save_pasted_image_rejects_nonexistent_directory() {
+        let result = save_pasted_image(
+            "/tmp/nonexistent_dir_mdedit_test_99999".to_string(),
+            TINY_PNG_BASE64.to_string(),
+            None,
+            None,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Directory does not exist"));
+    }
+
+    #[test]
+    fn test_save_pasted_image_rejects_invalid_base64() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir_str = dir.path().to_string_lossy().to_string();
+
+        let result = save_pasted_image(
+            dir_str,
+            "not-valid-base64!!!".to_string(),
+            None,
+            None,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid base64 data"));
+    }
+
+    #[test]
+    fn test_save_pasted_image_rejects_empty_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir_str = dir.path().to_string_lossy().to_string();
+
+        // Empty string encodes to empty bytes
+        let result = save_pasted_image(dir_str, String::new(), None, None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_save_pasted_image_uses_correct_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir_str = dir.path().to_string_lossy().to_string();
+
+        let name = save_pasted_image(
+            dir_str,
+            TINY_PNG_BASE64.to_string(),
+            None,
+            Some("jpeg".to_string()),
+        )
+        .unwrap();
+
+        assert!(name.ends_with(".jpg"));
+    }
+
+    #[test]
+    fn test_save_pasted_image_sanitizes_filename() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir_str = dir.path().to_string_lossy().to_string();
+
+        let name = save_pasted_image(
+            dir_str,
+            TINY_PNG_BASE64.to_string(),
+            Some("../evil/../../etc/passwd".to_string()),
+            None,
+        )
+        .unwrap();
+
+        // Path separator characters are stripped — the file stays in the target directory
+        assert!(!name.contains('/'));
+        // Dots are harmless without path separators — remaining safe chars form the filename
+        assert_eq!(name, "..evil....etcpasswd");
+
+        // Verify the file was actually created in the expected directory
+        let saved = dir.path().join(&name);
+        assert!(saved.exists());
+    }
+
+    #[test]
+    fn test_save_pasted_image_rejects_dotdot_filename() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir_str = dir.path().to_string_lossy().to_string();
+
+        // ".." passes the char filter but must be caught by the parent-dir guard
+        let result = save_pasted_image(
+            dir_str,
+            TINY_PNG_BASE64.to_string(),
+            Some("..".to_string()),
+            None,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Invalid filename"));
     }
 }

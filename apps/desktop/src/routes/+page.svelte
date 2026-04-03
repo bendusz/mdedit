@@ -13,6 +13,7 @@
     openFileDialog,
     saveCurrentFile,
     saveFileAsDialog,
+    savePastedImage,
     type FileData,
   } from '$lib/tauri/fileOps';
   import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -239,6 +240,141 @@
     }
   }
 
+  /**
+   * Extract the MIME subtype from a MIME type string (e.g., "image/png" -> "png").
+   */
+  function mimeSubtype(mimeType: string): string {
+    const parts = mimeType.split('/');
+    return parts[1] ?? 'png';
+  }
+
+  /**
+   * Convert a Blob to a base64-encoded string (without the data URI prefix).
+   */
+  function blobToBase64(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Strip the "data:image/png;base64," prefix
+        const base64 = result.split(',')[1] ?? '';
+        resolve(base64);
+      };
+      reader.onerror = () => reject(new Error('Failed to read image data'));
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  /**
+   * Handle paste events — if the clipboard contains an image, save it to disk
+   * alongside the current file and insert a markdown image reference.
+   */
+  async function handlePaste(e: ClipboardEvent) {
+    if (readingMode) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    // Find the first image item in the clipboard
+    let imageItem: DataTransferItem | null = null;
+    for (const item of items) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        imageItem = item;
+        break;
+      }
+    }
+    if (!imageItem) return;
+
+    // We have an image — prevent the default paste behavior
+    e.preventDefault();
+
+    const file = imageItem.getAsFile();
+    if (!file) return;
+
+    // If no file is open, prompt Save As first so we have a directory
+    let dir = directoryOf(fileState.path);
+    if (!dir) {
+      const rev = fileState.revision;
+      try {
+        const result = await saveFileAsDialog(contentForSave());
+        if (!result) return; // User cancelled
+        fileState.setFile(result.path, result.filename, result.content);
+        editor.setFileBasePath(directoryOf(result.path));
+        fileState.markSaved(rev);
+        dir = directoryOf(result.path);
+      } catch (err) {
+        console.error('Failed to save file before pasting image:', err);
+        return;
+      }
+    }
+
+    if (!dir) return;
+
+    try {
+      const base64Data = await blobToBase64(file);
+      const subtype = mimeSubtype(imageItem.type);
+      const savedFilename = await savePastedImage(base64Data, dir, undefined, subtype);
+
+      // Insert markdown image reference at the cursor position
+      const view = getEditorView();
+      if (view) {
+        const { from } = view.state.selection.main;
+        const insert = `![](${savedFilename})`;
+        view.dispatch({
+          changes: { from, insert },
+          selection: { anchor: from + insert.length },
+        });
+      }
+    } catch (err) {
+      console.error('Failed to paste image:', err);
+    }
+  }
+
+  /**
+   * Programmatically read an image from the clipboard (for command palette).
+   * Uses the Clipboard API's read() method.
+   */
+  async function pasteImageFromClipboard() {
+    if (readingMode) return;
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      for (const item of clipboardItems) {
+        const imageType = item.types.find((t) => t.startsWith('image/'));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          // Synthesize the same flow as handlePaste
+          let dir = directoryOf(fileState.path);
+          if (!dir) {
+            const rev = fileState.revision;
+            const result = await saveFileAsDialog(contentForSave());
+            if (!result) return;
+            fileState.setFile(result.path, result.filename, result.content);
+            editor.setFileBasePath(directoryOf(result.path));
+            fileState.markSaved(rev);
+            dir = directoryOf(result.path);
+          }
+          if (!dir) return;
+
+          const base64Data = await blobToBase64(blob);
+          const subtype = mimeSubtype(imageType);
+          const savedFilename = await savePastedImage(base64Data, dir, undefined, subtype);
+
+          const view = getEditorView();
+          if (view) {
+            const { from } = view.state.selection.main;
+            const insert = `![](${savedFilename})`;
+            view.dispatch({
+              changes: { from, insert },
+              selection: { anchor: from + insert.length },
+            });
+          }
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to read clipboard:', err);
+    }
+  }
+
   function handleKeydown(e: KeyboardEvent) {
     const mod = e.metaKey || e.ctrlKey;
     const key = e.key.toLowerCase();
@@ -314,6 +450,7 @@
 
   onMount(async () => {
     window.addEventListener('keydown', handleKeydown);
+    window.addEventListener('paste', handlePaste);
 
     // Register app-level commands in the command palette
     const view = getEditorView();
@@ -326,6 +463,7 @@
         { id: 'file-export-html', label: 'Export to HTML', category: 'File', shortcut: '\u2318\u21E7E', execute: () => { void handleExportHtml(); } },
         { id: 'view-toggle-outline', label: 'Toggle Outline', category: 'View', shortcut: '\u2318\u21E7O', execute: () => { toggleOutline(); } },
         { id: 'view-toggle-reading-mode', label: 'Toggle Reading Mode', category: 'View', shortcut: '\u2318\u21E7R', execute: () => { void toggleReadingMode(); } },
+        { id: 'edit-paste-image', label: 'Paste Image', category: 'Edit', execute: () => { void pasteImageFromClipboard(); } },
       ];
       registerPaletteCommands(view, appCommands);
       updateOutline();
@@ -383,6 +521,7 @@
 
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown);
+    window.removeEventListener('paste', handlePaste);
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
     unlistenMenu?.();
     unlistenOpenFile?.();
