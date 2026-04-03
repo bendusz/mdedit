@@ -6,6 +6,7 @@
   import { fileState } from '$lib/stores/fileState.svelte';
   import { openFile, openFileDialog, saveFile, saveFileAsDialog, addToRecent } from '$lib/tauri/fileOps';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
+  import { listen } from '@tauri-apps/api/event';
   import type { CursorInfo } from '@mdedit/core';
 
   let editor: Editor;
@@ -116,9 +117,19 @@
   }
 
   let unlistenDragDrop: (() => void) | null = null;
+  let unlistenMenu: (() => void) | null = null;
 
   onMount(async () => {
     window.addEventListener('keydown', handleKeydown);
+
+    unlistenMenu = await listen<string>('menu-event', (event) => {
+      switch (event.payload) {
+        case 'new': handleNew(); break;
+        case 'open': handleOpen(); break;
+        case 'save': handleSave(); break;
+        case 'save_as': handleSaveAs(); break;
+      }
+    });
 
     unlistenDragDrop = await getCurrentWebview().onDragDropEvent(async (event) => {
       if (event.payload.type === 'drop') {
@@ -141,6 +152,7 @@
     window.removeEventListener('keydown', handleKeydown);
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
     unlistenDragDrop?.();
+    unlistenMenu?.();
   });
 </script>
 

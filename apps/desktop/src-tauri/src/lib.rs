@@ -1,4 +1,5 @@
 mod commands;
+mod menu;
 mod recent_files;
 
 use commands::{
@@ -10,6 +11,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            menu::setup_menu(app)?;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             open_file,
             open_file_dialog,
