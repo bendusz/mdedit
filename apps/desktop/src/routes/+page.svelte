@@ -156,6 +156,7 @@
   let unlistenDragDrop: (() => void) | null = null;
   let unlistenMenu: (() => void) | null = null;
   let unlistenOpenFile: (() => void) | null = null;
+  let unlistenClose: (() => void) | null = null;
 
   onMount(async () => {
     window.addEventListener('keydown', handleKeydown);
@@ -182,6 +183,23 @@
         }
       }
     });
+
+    // Guard against closing with unsaved changes — auto-save before quit
+    const currentWindow = getCurrentWindow();
+    unlistenClose = await currentWindow.onCloseRequested(async (event) => {
+      if (fileState.isDirty) {
+        event.preventDefault();
+        // Auto-save before closing
+        if (fileState.path) {
+          try {
+            const rev = fileState.revision;
+            await saveFile(fileState.path, contentForSave());
+            fileState.markSaved(rev);
+          } catch (_) { /* proceed even if save fails */ }
+        }
+        await currentWindow.destroy();
+      }
+    });
   });
 
   onDestroy(() => {
@@ -190,6 +208,7 @@
     unlistenDragDrop?.();
     unlistenMenu?.();
     unlistenOpenFile?.();
+    unlistenClose?.();
   });
 </script>
 
