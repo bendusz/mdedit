@@ -9,7 +9,7 @@ import {
   bracketMatching,
 } from '@codemirror/language';
 import { search, searchKeymap } from '@codemirror/search';
-import { livePreview } from './extensions/live-preview';
+import { livePreview, FrontmatterExtension } from './extensions/live-preview';
 import { imageBasePath } from './extensions/image-widget';
 import { markdownKeybindings } from './toolbar/keybindings';
 import { commandPaletteExtension } from './command-palette/palette-extension';
@@ -91,7 +91,7 @@ export function createEditor(config: EditorConfig): EditorView {
     doc: content,
     extensions: [
       history(),
-      markdown({ base: markdownLanguage, codeLanguages: languages }),
+      markdown({ base: markdownLanguage, codeLanguages: languages, extensions: FrontmatterExtension }),
       syntaxHighlighting(defaultHighlightStyle),
       bracketMatching(),
       search(),
