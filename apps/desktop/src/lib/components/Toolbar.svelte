@@ -170,11 +170,11 @@
   }
 
   .toolbar-btn:hover {
-    background: rgba(0, 0, 0, 0.08);
+    background: var(--hover-bg);
   }
 
   .toolbar-btn:active {
-    background: rgba(0, 0, 0, 0.12);
+    background: var(--active-bg);
   }
 
   .toolbar-btn.bold {
@@ -212,7 +212,7 @@
     background: var(--toolbar-bg, #f9fafb);
     border: 1px solid var(--toolbar-border, #e5e7eb);
     border-radius: 4px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 2px 8px var(--shadow);
   }
 
   .heading-option {
@@ -231,6 +231,6 @@
   }
 
   .heading-option:hover {
-    background: rgba(0, 0, 0, 0.08);
+    background: var(--hover-bg);
   }
 </style>

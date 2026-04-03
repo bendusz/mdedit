@@ -4,11 +4,12 @@
   import Toolbar from '$lib/components/Toolbar.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
   import { fileState } from '$lib/stores/fileState.svelte';
+  import { themeState } from '$lib/stores/theme.svelte';
   import { openFile, openFileDialog, saveFile, saveFileAsDialog, addToRecent } from '$lib/tauri/fileOps';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { listen } from '@tauri-apps/api/event';
-  import type { CursorInfo } from '@mdedit/core';
+  import { setEditorTheme, type CursorInfo } from '@mdedit/core';
 
   let editor: Editor;
   let cursorLine = $state(1);
@@ -121,6 +122,15 @@
     const dot = fileState.isDirty ? '\u25CF ' : '';
     const name = fileState.filename ?? 'Untitled';
     getCurrentWindow().setTitle(`${dot}${name} \u2014 mdedit`);
+  });
+
+  $effect(() => {
+    const dark = themeState.isDark;
+    document.documentElement.classList.toggle('dark', dark);
+    const view = getEditorView();
+    if (view) {
+      setEditorTheme(view, dark);
+    }
   });
 
   let unlistenDragDrop: (() => void) | null = null;

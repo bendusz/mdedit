@@ -1,4 +1,4 @@
-import { Annotation, EditorState } from '@codemirror/state';
+import { Annotation, Compartment, EditorState } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
@@ -12,12 +12,16 @@ import { search, searchKeymap } from '@codemirror/search';
 import { livePreview } from './extensions/live-preview';
 import { markdownKeybindings } from './toolbar/keybindings';
 import { getCursorInfo, type CursorInfo } from './observers';
+import { lightTheme, darkTheme } from './theme';
+
+const themeCompartment = new Compartment();
 
 export type LineSeparator = '\n' | '\r\n';
 
 export interface EditorConfig {
   parent: HTMLElement;
   content: string;
+  dark?: boolean;
   onDocChange?: (content: string) => void;
   onSelectionChange?: (info: CursorInfo) => void;
 }
@@ -38,8 +42,14 @@ export function detectLineSeparator(content: string): LineSeparator {
   return content.includes('\r\n') ? '\r\n' : '\n';
 }
 
+export function setEditorTheme(view: EditorView, dark: boolean) {
+  view.dispatch({
+    effects: themeCompartment.reconfigure(dark ? darkTheme : lightTheme),
+  });
+}
+
 export function createEditor(config: EditorConfig): EditorView {
-  const { parent, content, onDocChange, onSelectionChange } = config;
+  const { parent, content, dark, onDocChange, onSelectionChange } = config;
 
   const updateListener = EditorView.updateListener.of((update) => {
     if (update.docChanged && onDocChange) {
@@ -64,6 +74,7 @@ export function createEditor(config: EditorConfig): EditorView {
       keymap.of(markdownKeybindings),
       keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
       ...livePreview(),
+      themeCompartment.of(dark ? darkTheme : lightTheme),
       updateListener,
       EditorView.lineWrapping,
     ],

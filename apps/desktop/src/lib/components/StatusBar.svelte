@@ -28,9 +28,9 @@
     height: 24px;
     padding: 0 12px;
     font-size: 12px;
-    color: #888;
-    background: #f5f5f5;
-    border-top: 1px solid #e0e0e0;
+    color: var(--statusbar-fg);
+    background: var(--statusbar-bg);
+    border-top: 1px solid var(--statusbar-border);
     flex-shrink: 0;
   }
 
@@ -42,10 +42,10 @@
   }
 
   .sep {
-    color: #ccc;
+    color: var(--statusbar-sep);
   }
 
   .unsaved {
-    color: #c47a10;
+    color: var(--unsaved-fg);
   }
 </style>

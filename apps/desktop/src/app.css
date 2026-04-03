@@ -3,8 +3,37 @@
     Ubuntu, Cantarell, sans-serif;
   font-size: 16px;
   line-height: 1.6;
-  color: #1a1a1a;
-  background-color: #ffffff;
+
+  --fg: #1a1a1a;
+  --bg: #ffffff;
+  --toolbar-bg: #f9fafb;
+  --toolbar-border: #e5e7eb;
+  --statusbar-bg: #f5f5f5;
+  --statusbar-border: #e0e0e0;
+  --statusbar-fg: #888888;
+  --statusbar-sep: #cccccc;
+  --unsaved-fg: #c47a10;
+  --hover-bg: rgba(0, 0, 0, 0.08);
+  --active-bg: rgba(0, 0, 0, 0.12);
+  --shadow: rgba(0, 0, 0, 0.12);
+
+  color: var(--fg);
+  background-color: var(--bg);
+}
+
+:root.dark {
+  --fg: #cdd6f4;
+  --bg: #1e1e2e;
+  --toolbar-bg: #181825;
+  --toolbar-border: #313244;
+  --statusbar-bg: #181825;
+  --statusbar-border: #313244;
+  --statusbar-fg: #a6adc8;
+  --statusbar-sep: #45475a;
+  --unsaved-fg: #fab387;
+  --hover-bg: rgba(255, 255, 255, 0.08);
+  --active-bg: rgba(255, 255, 255, 0.12);
+  --shadow: rgba(0, 0, 0, 0.3);
 }
 
 * {

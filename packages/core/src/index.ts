@@ -3,9 +3,12 @@ export {
   detectLineSeparator,
   isFileLoad,
   loadEditorContent,
+  setEditorTheme,
   type EditorConfig,
   type LineSeparator,
 } from './editor';
+
+export { lightTheme, darkTheme } from './theme';
 
 export { getCursorInfo, type CursorInfo } from './observers';
 
