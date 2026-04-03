@@ -4,11 +4,13 @@ import { headingDecoration } from './heading-decoration';
 import { inlineDecoration, inlineStyles } from './inline-decoration';
 import { linkDecoration, linkStyles } from './link-decoration';
 import { imageDecoration } from './image-widget';
+import { codeBlockDecoration, codeBlockStyles } from './code-block';
 
 export { headingDecoration } from './heading-decoration';
 export { inlineDecoration, inlineStyles } from './inline-decoration';
 export { linkDecoration, linkStyles } from './link-decoration';
 export { imageDecoration } from './image-widget';
+export { codeBlockDecoration, codeBlockStyles } from './code-block';
 
 const headingStyles = EditorView.baseTheme({
   '.cm-heading-1': { fontSize: '2em', fontWeight: '700', lineHeight: '1.2' },
@@ -21,5 +23,5 @@ const headingStyles = EditorView.baseTheme({
 
 /** Returns all live-preview extensions (heading decorations, styles, etc.). */
 export function livePreview(): Extension[] {
-  return [headingDecoration, headingStyles, inlineDecoration, inlineStyles, linkDecoration, linkStyles, imageDecoration];
+  return [headingDecoration, headingStyles, inlineDecoration, inlineStyles, linkDecoration, linkStyles, imageDecoration, codeBlockDecoration, codeBlockStyles];
 }
