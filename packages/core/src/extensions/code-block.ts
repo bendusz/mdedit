@@ -9,7 +9,8 @@ import {
 import type { EditorState, Range } from '@codemirror/state';
 
 function buildDecorations(state: EditorState): DecorationSet {
-  const decorations: Range<Decoration>[] = [];
+  const lineDecorations: Range<Decoration>[] = [];
+  const replaceDecorations: Range<Decoration>[] = [];
 
   // Collect all lines the cursor touches
   const cursorLines = new Set<number>();
@@ -40,32 +41,38 @@ function buildDecorations(state: EditorState): DecorationSet {
         }
       }
 
-      // Apply .cm-code-block line decoration to every line in the block
+      // Apply decorations to each line in the block
       for (let l = firstLine.number; l <= lastLine.number; l++) {
         const line = state.doc.line(l);
 
-        // If cursor is NOT inside the block, hide opening and closing fence lines
-        if (!cursorInside) {
-          if (l === firstLine.number || l === lastLine.number) {
-            // Hide the entire fence line via Decoration.replace
-            decorations.push(
-              Decoration.replace({}).range(line.from, line.to),
-            );
-            continue;
+        if (!cursorInside && (l === firstLine.number || l === lastLine.number)) {
+          // Hide fence content but keep the line. Apply collapsed styling.
+          // Line decorations must be pushed before replace decorations at same position.
+          lineDecorations.push(
+            Decoration.line({ class: 'cm-code-block cm-code-fence' }).range(line.from),
+          );
+          if (line.to > line.from) {
+            replaceDecorations.push(Decoration.replace({}).range(line.from, line.to));
           }
+          continue;
         }
 
-        decorations.push(
+        lineDecorations.push(
           Decoration.line({ class: 'cm-code-block' }).range(line.from),
         );
       }
     },
   });
 
-  // Sort decorations by from position (required by RangeSet)
-  decorations.sort((a, b) => a.from - b.from);
+  // Line decorations must come before replace decorations in RangeSet.
+  // Build separate sorted sets and merge them.
+  lineDecorations.sort((a, b) => a.from - b.from);
+  replaceDecorations.sort((a, b) => a.from - b.from);
 
-  return Decoration.set(decorations);
+  const lineSet = Decoration.set(lineDecorations);
+  const replaceSet = Decoration.set(replaceDecorations);
+
+  return lineSet.update({ add: replaceDecorations, sort: true });
 }
 
 export const codeBlockDecoration = ViewPlugin.fromClass(
@@ -93,5 +100,11 @@ export const codeBlockStyles = EditorView.baseTheme({
     fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace",
     fontSize: '0.9em',
     padding: '0 8px',
+  },
+  '.cm-code-fence': {
+    fontSize: '0',
+    lineHeight: '0',
+    padding: '0',
+    minHeight: '0',
   },
 });
