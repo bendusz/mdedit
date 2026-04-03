@@ -12,12 +12,30 @@
   let cursorCol = $state(1);
   let wordCount = $state(0);
 
+  let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function scheduleAutoSave() {
+    if (autoSaveTimer) clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(async () => {
+      if (fileState.isDirty && fileState.path) {
+        const rev = fileState.revision;
+        try {
+          await saveFile(fileState.path, contentForSave());
+          fileState.markSaved(rev);
+        } catch (e) {
+          console.error('Auto-save failed:', e);
+        }
+      }
+    }, 2000);
+  }
+
   function getEditorView() {
     return editor?.getView();
   }
 
   function onDocChange(content: string) {
     fileState.setContent(content);
+    scheduleAutoSave();
   }
 
   function onSelectionChange(info: CursorInfo) {
@@ -101,6 +119,7 @@
 
   onDestroy(() => {
     window.removeEventListener('keydown', handleKeydown);
+    if (autoSaveTimer) clearTimeout(autoSaveTimer);
   });
 </script>
 
