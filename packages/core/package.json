@@ -20,10 +20,12 @@
     "@codemirror/view": "^6",
     "@lezer/common": "^1",
     "@lezer/markdown": "^1",
+    "katex": "^0.16.44",
     "marked": "^17.0.5",
     "mermaid": "^11.14.0"
   },
   "devDependencies": {
+    "@types/katex": "^0.16.8",
     "jsdom": "^26",
     "typescript": "^5",
     "vite": "^6",
