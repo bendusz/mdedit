@@ -41,3 +41,6 @@ export {
 } from './command-palette/palette-extension';
 
 export { defaultCommands, filterCommands, type PaletteCommand } from './command-palette/commands';
+
+export { getOutline, type OutlineEntry } from './outline';
+

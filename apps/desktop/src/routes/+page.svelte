@@ -16,13 +16,17 @@
   } from '$lib/tauri/fileOps';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { listen } from '@tauri-apps/api/event';
-  import { setEditorTheme, setContentWidth, registerPaletteCommands, type CursorInfo, type PaletteCommand } from '@mdedit/core';
+  import { setEditorTheme, setContentWidth, registerPaletteCommands, getOutline, type CursorInfo, type PaletteCommand, type OutlineEntry } from '@mdedit/core';
+  import { EditorView } from '@mdedit/core';
+  import OutlineSidebar from '$lib/components/OutlineSidebar.svelte';
   import { contentWidthState } from '$lib/stores/contentWidth.svelte';
 
   let editor: Editor;
   let cursorLine = $state(1);
   let cursorCol = $state(1);
   let wordCount = $state(0);
+  let showOutline = $state(false);
+  let outlineEntries: OutlineEntry[] = $state([]);
 
   let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
   const WELCOME_CONTENT = '# Welcome to mdedit\n\nStart typing your markdown here.';
@@ -38,6 +42,7 @@
     fileState.setFile(data.path, data.filename, data.content);
     editor.setFileBasePath(directoryOf(data.path));
     editor.loadFile(data.content);
+    updateOutline();
   }
 
   function scheduleAutoSave() {
@@ -62,12 +67,39 @@
   function onDocChange(content: string) {
     fileState.setContent(content);
     scheduleAutoSave();
+    updateOutline();
+  }
+
+  function updateOutline() {
+    const view = getEditorView();
+    if (view) {
+      outlineEntries = getOutline(view.state);
+    }
+  }
+
+  function handleOutlineEntryClick(entry: OutlineEntry) {
+    const view = getEditorView();
+    if (view) {
+      view.dispatch({
+        selection: { anchor: entry.from },
+        effects: EditorView.scrollIntoView(entry.from, { y: 'start', yMargin: 20 }),
+      });
+      view.focus();
+    }
+  }
+
+  function toggleOutline() {
+    showOutline = !showOutline;
+    if (showOutline) {
+      updateOutline();
+    }
   }
 
   function onSelectionChange(info: CursorInfo) {
     cursorLine = info.line;
     cursorCol = info.col;
     wordCount = info.wordCount;
+    updateOutline();
   }
 
   async function saveCurrentDocumentBeforeSwitch(): Promise<boolean> {
@@ -167,6 +199,7 @@
     fileState.reset();
     editor.setFileBasePath('');
     editor.loadFile(WELCOME_CONTENT);
+    updateOutline();
     try {
       await clearCurrentFile();
     } catch (e) {
@@ -177,7 +210,10 @@
   function handleKeydown(e: KeyboardEvent) {
     const mod = e.metaKey || e.ctrlKey;
     const key = e.key.toLowerCase();
-    if (mod && e.shiftKey && key === 's') {
+    if (mod && e.shiftKey && key === 'o') {
+      e.preventDefault();
+      toggleOutline();
+    } else if (mod && e.shiftKey && key === 's') {
       e.preventDefault();
       void handleSaveAs();
     } else if (mod && key === 'o') {
@@ -249,8 +285,10 @@
         { id: 'file-open', label: 'Open File', category: 'File', shortcut: '\u2318O', execute: () => { void handleOpen(); } },
         { id: 'file-save', label: 'Save', category: 'File', shortcut: '\u2318S', execute: () => { void handleSave(); } },
         { id: 'file-save-as', label: 'Save As...', category: 'File', shortcut: '\u2318\u21E7S', execute: () => { void handleSaveAs(); } },
+        { id: 'view-toggle-outline', label: 'Toggle Outline', category: 'View', shortcut: '\u2318\u21E7O', execute: () => { toggleOutline(); } },
       ];
       registerPaletteCommands(view, appCommands);
+      updateOutline();
     }
 
     unlistenMenu = await listen<string>('menu-event', (event) => {
@@ -313,7 +351,10 @@
 
 <main class="app">
   <Toolbar {getEditorView} />
-  <Editor bind:this={editor} {onDocChange} {onSelectionChange} />
+  <div class="editor-area">
+    <Editor bind:this={editor} {onDocChange} {onSelectionChange} />
+    <OutlineSidebar entries={outlineEntries} visible={showOutline} onEntryClick={handleOutlineEntryClick} />
+  </div>
   <StatusBar line={cursorLine} col={cursorCol} {wordCount} isDirty={fileState.isDirty} contentWidth={contentWidthState.width} onContentWidthChange={(w) => contentWidthState.setWidth(w)} />
 </main>
 
@@ -322,6 +363,12 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
+    overflow: hidden;
+  }
+
+  .editor-area {
+    display: flex;
+    flex: 1;
     overflow: hidden;
   }
 </style>
