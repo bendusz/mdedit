@@ -10,7 +10,6 @@ import type { EditorState, Range } from '@codemirror/state';
 
 function buildDecorations(state: EditorState): DecorationSet {
   const lineDecorations: Range<Decoration>[] = [];
-  const replaceDecorations: Range<Decoration>[] = [];
 
   // Collect all lines the cursor touches
   const cursorLines = new Set<number>();
@@ -41,64 +40,25 @@ function buildDecorations(state: EditorState): DecorationSet {
         }
       }
 
+      // When cursor is outside the frontmatter block, the frontmatter-editor
+      // widget handles the entire block with a replace decoration. We only
+      // apply line-level decorations when the cursor IS inside.
+      if (!cursorInside) return false;
+
       // Apply decorations to each line in the frontmatter block
       for (let l = firstLine.number; l <= lastLine.number; l++) {
         const line = state.doc.line(l);
 
         if (l === firstLine.number || l === lastLine.number) {
-          // Delimiter lines (---)
-          if (!cursorInside) {
-            // When cursor is outside, hide the delimiter content
-            lineDecorations.push(
-              Decoration.line({ class: 'cm-frontmatter cm-frontmatter-delimiter-line' }).range(line.from),
-            );
-            if (line.to > line.from) {
-              replaceDecorations.push(
-                Decoration.replace({}).range(line.from, line.to),
-              );
-            }
-          } else {
-            // When cursor is inside, show delimiter with styling
-            lineDecorations.push(
-              Decoration.line({ class: 'cm-frontmatter cm-frontmatter-delimiter' }).range(line.from),
-            );
-          }
+          // When cursor is inside, show delimiter with styling
+          lineDecorations.push(
+            Decoration.line({ class: 'cm-frontmatter cm-frontmatter-delimiter' }).range(line.from),
+          );
         } else {
-          // Content lines — style as frontmatter content
-          if (!cursorInside) {
-            // Styled view: apply key-value styling via line class
-            lineDecorations.push(
-              Decoration.line({ class: 'cm-frontmatter cm-frontmatter-content' }).range(line.from),
-            );
-
-            // Parse key: value and apply inline decorations
-            const text = state.doc.sliceString(line.from, line.to);
-            const colonIndex = text.indexOf(':');
-            if (colonIndex > 0) {
-              // Style the key portion (before the colon, inclusive)
-              replaceDecorations.push(
-                Decoration.mark({ class: 'cm-frontmatter-key' }).range(
-                  line.from,
-                  line.from + colonIndex + 1,
-                ),
-              );
-              // Style the value portion (after the colon)
-              const valueStart = line.from + colonIndex + 1;
-              if (valueStart < line.to) {
-                replaceDecorations.push(
-                  Decoration.mark({ class: 'cm-frontmatter-value' }).range(
-                    valueStart,
-                    line.to,
-                  ),
-                );
-              }
-            }
-          } else {
-            // Cursor inside: show raw source with subtle background
-            lineDecorations.push(
-              Decoration.line({ class: 'cm-frontmatter cm-frontmatter-raw' }).range(line.from),
-            );
-          }
+          // Cursor inside: show raw source with subtle background
+          lineDecorations.push(
+            Decoration.line({ class: 'cm-frontmatter cm-frontmatter-raw' }).range(line.from),
+          );
         }
       }
 
@@ -107,12 +67,8 @@ function buildDecorations(state: EditorState): DecorationSet {
     },
   });
 
-  // Line decorations must come before replace decorations at same position.
   lineDecorations.sort((a, b) => a.from - b.from);
-  replaceDecorations.sort((a, b) => a.from - b.from);
-
-  const lineSet = Decoration.set(lineDecorations);
-  return lineSet.update({ add: replaceDecorations, sort: true });
+  return Decoration.set(lineDecorations);
 }
 
 export const frontmatterDecoration = ViewPlugin.fromClass(
@@ -135,30 +91,10 @@ export const frontmatterDecoration = ViewPlugin.fromClass(
 );
 
 export const frontmatterStyles = EditorView.baseTheme({
-  // Container styling for frontmatter content lines
+  // Container styling for frontmatter lines (cursor inside)
   '.cm-frontmatter': {
     fontFamily: "'SF Mono', 'Fira Code', 'Consolas', monospace",
     fontSize: '0.85em',
-  },
-  // When cursor is outside: styled content view
-  '.cm-frontmatter-content': {
-    backgroundColor: 'rgba(59, 130, 246, 0.04)',
-    borderLeft: '2px solid rgba(59, 130, 246, 0.3)',
-    paddingLeft: '8px',
-  },
-  '.cm-frontmatter-key': {
-    fontWeight: '600',
-    color: '#6366f1',
-  },
-  '.cm-frontmatter-value': {
-    color: '#64748b',
-  },
-  // Hidden delimiter lines (collapsed when cursor outside)
-  '.cm-frontmatter-delimiter-line': {
-    fontSize: '0',
-    lineHeight: '0',
-    padding: '0',
-    minHeight: '0',
   },
   // Visible delimiter lines (when cursor inside)
   '.cm-frontmatter-delimiter': {
@@ -171,16 +107,6 @@ export const frontmatterStyles = EditorView.baseTheme({
     paddingLeft: '8px',
   },
   // Dark mode variants
-  '&dark .cm-frontmatter-content': {
-    backgroundColor: 'rgba(99, 102, 241, 0.08)',
-    borderLeftColor: 'rgba(99, 102, 241, 0.4)',
-  },
-  '&dark .cm-frontmatter-key': {
-    color: '#a5b4fc',
-  },
-  '&dark .cm-frontmatter-value': {
-    color: '#94a3b8',
-  },
   '&dark .cm-frontmatter-delimiter': {
     color: '#64748b',
   },

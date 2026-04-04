@@ -11,6 +11,7 @@ import { listDecoration, listStyles } from './list-decoration';
 import { tableDecoration, tableStyles } from './table-decoration';
 import { tableWidget } from './table-widget';
 import { frontmatterDecoration, frontmatterStyles } from './frontmatter-decoration';
+import { frontmatterEditor } from './frontmatter-editor';
 import { mermaidWidget } from './mermaid-widget';
 import { mathWidget } from './math-widget';
 import { footnoteDecoration, footnoteStyles } from './footnote-decoration';
@@ -28,6 +29,7 @@ export { listDecoration, listStyles } from './list-decoration';
 export { tableDecoration, tableStyles } from './table-decoration';
 export { tableWidget } from './table-widget';
 export { frontmatterDecoration, frontmatterStyles } from './frontmatter-decoration';
+export { frontmatterEditor, frontmatterEditorStyles, parseFrontmatterFields, type FrontmatterField } from './frontmatter-editor';
 export { FrontmatterExtension } from './frontmatter-parser';
 export { mermaidWidget } from './mermaid-widget';
 export { mathWidget } from './math-widget';
@@ -67,6 +69,7 @@ export function livePreview(): Extension[] {
     tableWidget,
     frontmatterDecoration,
     frontmatterStyles,
+    frontmatterEditor,
     mermaidWidget,
     mathWidget,
     footnoteDecoration,

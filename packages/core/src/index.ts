@@ -32,7 +32,7 @@ export { getCursorInfo, type CursorInfo } from './observers';
 
 export { EditorView } from '@codemirror/view';
 
-export { livePreview, FrontmatterExtension, mermaidWidget, mathWidget, footnoteDecoration, footnoteStyles, emojiDecoration, emojiAutocomplete, emojiMap, replaceEmojiShortcodes, admonitionDecoration, admonitionStyles, parseAdmonitionType, type AdmonitionType } from './extensions/live-preview';
+export { livePreview, FrontmatterExtension, frontmatterEditor, frontmatterEditorStyles, parseFrontmatterFields, type FrontmatterField, mermaidWidget, mathWidget, footnoteDecoration, footnoteStyles, emojiDecoration, emojiAutocomplete, emojiMap, replaceEmojiShortcodes, admonitionDecoration, admonitionStyles, parseAdmonitionType, type AdmonitionType } from './extensions/live-preview';
 export { clearMermaidCache, mermaidDarkMode } from './extensions/mermaid-widget';
 export { clearMathCache } from './extensions/math-widget';
 

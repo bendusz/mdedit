@@ -139,30 +139,37 @@ describe('frontmatter decorations', () => {
     container.remove();
   });
 
-  it('should apply frontmatter styling classes when cursor is outside', () => {
+  it('should show frontmatter editor widget when cursor is outside', () => {
     const content = '---\ntitle: Hello\n---\n\n# Body';
     view = createEditor({ parent: container, content });
 
     // Place cursor at end of document (in # Body)
     setCursorAt(view, content.length);
 
-    const lines = container.querySelectorAll('.cm-line');
+    // The frontmatter editor widget should be shown
+    const widget = container.querySelector('.cm-frontmatter-editor');
+    expect(widget).not.toBeNull();
 
-    // Content line should have frontmatter styling
-    const contentLines = container.querySelectorAll('.cm-frontmatter-content');
-    expect(contentLines.length).toBeGreaterThan(0);
+    // The widget should contain the key-value pair
+    const keys = container.querySelectorAll('.cm-frontmatter-editor-key');
+    expect(keys.length).toBe(1);
+    expect(keys[0].textContent).toBe('title');
   });
 
-  it('should hide delimiters when cursor is outside frontmatter', () => {
+  it('should replace frontmatter block with widget when cursor is outside', () => {
     const content = '---\ntitle: Hello\n---\n\n# Body';
     view = createEditor({ parent: container, content });
 
     // Place cursor in the body
     setCursorAt(view, content.length);
 
-    // Delimiter lines should be collapsed
+    // Old line-level decorations should NOT be present (replaced by widget)
     const delimiterLines = container.querySelectorAll('.cm-frontmatter-delimiter-line');
-    expect(delimiterLines.length).toBe(2);
+    expect(delimiterLines.length).toBe(0);
+
+    // The widget should be present instead
+    const widget = container.querySelector('.cm-frontmatter-editor');
+    expect(widget).not.toBeNull();
   });
 
   it('should reveal raw source when cursor is inside frontmatter', () => {
@@ -185,18 +192,22 @@ describe('frontmatter decorations', () => {
     expect(collapsedLines.length).toBe(0);
   });
 
-  it('should apply key-value styling to frontmatter content', () => {
+  it('should show key-value inputs in frontmatter editor widget', () => {
     const content = '---\ntitle: Hello World\nauthor: Ben\n---\n\nBody text';
     view = createEditor({ parent: container, content });
 
     // Place cursor outside frontmatter
     setCursorAt(view, content.length);
 
-    // Check for key and value decorations
-    const keys = container.querySelectorAll('.cm-frontmatter-key');
-    const values = container.querySelectorAll('.cm-frontmatter-value');
-    expect(keys.length).toBeGreaterThan(0);
-    expect(values.length).toBeGreaterThan(0);
+    // Check for key labels and value inputs in the widget
+    const keys = container.querySelectorAll('.cm-frontmatter-editor-key');
+    const values = container.querySelectorAll<HTMLInputElement>('.cm-frontmatter-editor-value');
+    expect(keys.length).toBe(2);
+    expect(values.length).toBe(2);
+    expect(keys[0].textContent).toBe('title');
+    expect(values[0].value).toBe('Hello World');
+    expect(keys[1].textContent).toBe('author');
+    expect(values[1].value).toBe('Ben');
   });
 
   it('should not apply decorations to documents without frontmatter', () => {
