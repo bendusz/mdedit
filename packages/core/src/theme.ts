@@ -1,4 +1,5 @@
-import { EditorView, type Extension } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
+import type { Extension } from '@codemirror/state';
 
 // --- Built-in themes ---
 

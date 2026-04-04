@@ -1,4 +1,5 @@
 import type { BlockParser, MarkdownConfig, Line, BlockContext } from '@lezer/markdown';
+import type { Input } from '@lezer/common';
 
 /**
  * Custom @lezer/markdown block parser that recognizes YAML frontmatter
@@ -32,7 +33,10 @@ const frontmatterParser: BlockParser = {
 
     // Pre-scan: search the document text for a closing `---` without
     // calling cx.nextLine(), which would consume lines irreversibly.
-    const docText = cx.input.read(openEnd, cx.input.length);
+    // BlockContext stores `input` at runtime but the type declarations
+    // mark it as private.  Cast to access the underlying Input.
+    const input = (cx as unknown as { input: Input }).input;
+    const docText = input.read(openEnd, input.length);
     const closingIndex = findClosingDelimiter(docText);
     if (closingIndex === -1) return false;
 
