@@ -13,6 +13,7 @@ import { autocompletion } from '@codemirror/autocomplete';
 import { livePreview, FrontmatterExtension, emojiAutocomplete } from './extensions/live-preview';
 import { imageBasePath } from './extensions/image-widget';
 import { focusHighlight } from './extensions/focus-highlight';
+import { typewriterScrolling } from './extensions/typewriter-scrolling';
 import { markdownKeybindings } from './toolbar/keybindings';
 import { commandPaletteExtension } from './command-palette/palette-extension';
 import { getCursorInfo, type CursorInfo } from './observers';
@@ -25,6 +26,7 @@ const contentWidthCompartment = new Compartment();
 const readOnlyCompartment = new Compartment();
 const mermaidDarkModeCompartment = new Compartment();
 const focusHighlightCompartment = new Compartment();
+const typewriterScrollingCompartment = new Compartment();
 
 export type LineSeparator = '\n' | '\r\n';
 
@@ -115,6 +117,18 @@ export function setFocusHighlight(view: EditorView, enabled: boolean) {
   });
 }
 
+/**
+ * Toggle typewriter scrolling. When enabled, the cursor line is kept
+ * vertically centered in the viewport as the user types.
+ */
+export function setTypewriterScrolling(view: EditorView, enabled: boolean) {
+  view.dispatch({
+    effects: typewriterScrollingCompartment.reconfigure(
+      enabled ? typewriterScrolling() : [],
+    ),
+  });
+}
+
 export function createEditor(config: EditorConfig): EditorView {
   const { parent, content, dark, imageBasePath: basePath = '', contentWidth = '80ch', onDocChange, onSelectionChange } = config;
 
@@ -153,6 +167,7 @@ export function createEditor(config: EditorConfig): EditorView {
         EditorView.editable.of(true),
       ]),
       focusHighlightCompartment.of([]),
+      typewriterScrollingCompartment.of([]),
       updateListener,
       EditorView.lineWrapping,
       EditorView.contentAttributes.of({ spellcheck: 'true' }),

@@ -68,7 +68,7 @@ cd apps/desktop && pnpm check
 Editor: `createEditor`, `loadEditorContent`, `setEditorTheme`, `isFileLoad`, `detectLineSeparator`
 Decorations: `livePreview` (aggregates all decoration extensions)
 Toolbar: `toggleBold`, `toggleItalic`, `toggleStrikethrough`, `insertLink`, `insertImage`, `setHeading`, `toggleList`, `toggleTaskList`, `insertCodeBlock`, `insertHorizontalRule`, `insertTable`
-Other: `markdownKeybindings`, `getCursorInfo`, `lightTheme`, `darkTheme`, `setFocusHighlight`, `focusHighlight`, `setContentWidth`, `setReadOnly`
+Other: `markdownKeybindings`, `getCursorInfo`, `lightTheme`, `darkTheme`, `setFocusHighlight`, `focusHighlight`, `setContentWidth`, `setReadOnly`, `setTypewriterScrolling`, `typewriterScrolling`
 Types: `EditorConfig`, `EditorView`, `CursorInfo`, `LineSeparator`
 
 ## CM6 Gotchas

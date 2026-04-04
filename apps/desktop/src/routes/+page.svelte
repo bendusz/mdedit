@@ -19,7 +19,7 @@
   import { printHtml } from '$lib/print';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { listen } from '@tauri-apps/api/event';
-  import { setEditorTheme, setContentWidth, setReadOnly, setFocusHighlight, registerPaletteCommands, getOutline, markdownToHtml, EditorView, themeList, type CursorInfo, type PaletteCommand, type OutlineEntry, type ThemeId } from '@mdedit/core';
+  import { setEditorTheme, setContentWidth, setReadOnly, setFocusHighlight, setTypewriterScrolling, registerPaletteCommands, getOutline, markdownToHtml, EditorView, themeList, type CursorInfo, type PaletteCommand, type OutlineEntry, type ThemeId } from '@mdedit/core';
   import OutlineSidebar from '$lib/components/OutlineSidebar.svelte';
   import { contentWidthState } from '$lib/stores/contentWidth.svelte';
 
@@ -30,7 +30,9 @@
   let showOutline = $state(false);
   let readingMode = $state(false);
   let zenMode = $state(false);
+  let typewriterMode = $state(false);
   let preZenWidth: string | null = null;
+  let preZenTypewriter: boolean = false;
   let outlineEntries: OutlineEntry[] = $state([]);
 
   let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -51,6 +53,13 @@
     }
   }
 
+  function toggleTypewriterMode() {
+    const view = getEditorView();
+    if (!view) return;
+    typewriterMode = !typewriterMode;
+    setTypewriterScrolling(view, typewriterMode);
+  }
+
   async function toggleZenMode() {
     const view = getEditorView();
     if (!view) return;
@@ -63,13 +72,22 @@
         await appWindow.setFullscreen(true);
         zenMode = true;
         preZenWidth = contentWidthState.width;
+        preZenTypewriter = typewriterMode;
         setContentWidth(view, '72ch');
         setFocusHighlight(view, true);
+        if (!typewriterMode) {
+          typewriterMode = true;
+          setTypewriterScrolling(view, true);
+        }
       } else {
         await appWindow.setFullscreen(false);
         zenMode = false;
         if (preZenWidth) setContentWidth(view, preZenWidth);
         setFocusHighlight(view, false);
+        if (!preZenTypewriter) {
+          typewriterMode = false;
+          setTypewriterScrolling(view, false);
+        }
       }
     } catch (e) {
       console.error('Failed to toggle zen mode:', e);
@@ -532,6 +550,7 @@
         { id: 'view-toggle-outline', label: 'Toggle Outline', category: 'View', shortcut: '\u2318\u21E7O', execute: () => { toggleOutline(); } },
         { id: 'view-toggle-reading-mode', label: 'Toggle Reading Mode', category: 'View', shortcut: '\u2318\u21E7R', execute: () => { void toggleReadingMode(); } },
         { id: 'view-toggle-zen-mode', label: 'Toggle Zen Mode', category: 'View', shortcut: '\u2318\u21E7F', execute: () => { void toggleZenMode(); } },
+        { id: 'view-toggle-typewriter', label: 'Toggle Typewriter Scrolling', category: 'View', execute: () => { toggleTypewriterMode(); } },
         { id: 'edit-paste-image', label: 'Paste Image', category: 'Edit', execute: () => { void pasteImageFromClipboard(); } },
         ...themeList.map((t) => ({
           id: `theme-${t.id}`,

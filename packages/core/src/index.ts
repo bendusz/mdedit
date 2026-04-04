@@ -8,6 +8,7 @@ export {
   setFocusHighlight,
   setImageBasePath,
   setReadOnly,
+  setTypewriterScrolling,
   type EditorConfig,
   type LineSeparator,
 } from './editor';
@@ -73,3 +74,5 @@ export {
 } from './extensions/table-editor';
 
 export { focusHighlight } from './extensions/focus-highlight';
+
+export { typewriterScrolling } from './extensions/typewriter-scrolling';
