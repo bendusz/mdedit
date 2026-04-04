@@ -25,21 +25,25 @@ The Rust backend owns all filesystem access and native dialogs. The webview has 
 
 ```bash
 pnpm dev              # Run Tauri desktop app in dev mode (Vite + Rust backend)
-pnpm build            # Build core lib, then Tauri desktop bundle
-pnpm test             # Run core library tests (Vitest)
+pnpm build            # Build core lib, then Tauri desktop bundle (needs cargo in PATH)
+pnpm test             # Run all tests: core (Vitest) + desktop (Vitest)
 pnpm core:dev         # Watch-build core library
 
 # Single test file
 pnpm --filter @mdedit/core test -- test/commands.test.ts
+pnpm --filter @mdedit/desktop test  # Run desktop tests only
 
 # Watch mode (re-runs on changes)
 pnpm --filter @mdedit/core test:watch
 
-# Rust tests (from apps/desktop/src-tauri/)
-cargo test            # Run Rust unit tests for file commands
+# Rust tests (cargo must be in PATH)
+cd apps/desktop/src-tauri && PATH="$HOME/.cargo/bin:$PATH" cargo test
 
 # SvelteKit type checking
 cd apps/desktop && pnpm check
+
+# Build with signing (for releases)
+TAURI_SIGNING_PRIVATE_KEY=$(cat ~/.tauri/mdedit.key) PATH="$HOME/.cargo/bin:$PATH" pnpm build
 ```
 
 ## Tech Stack
@@ -51,12 +55,12 @@ cd apps/desktop && pnpm check
 | Framework | SvelteKit 2 | adapter-static, SPA mode, `$lib` alias for `src/lib` |
 | Desktop shell | Tauri 2 | WKWebView on macOS, Rust backend for file I/O |
 | Build | Vite 6 | Library mode for core, SvelteKit for desktop |
-| Testing | Vitest (jsdom) + cargo test | Core tests in `packages/core/test/`, Rust tests inline in `commands.rs` |
+| Testing | Vitest (jsdom) + cargo test | Core: `packages/core/test/`, Desktop: `apps/desktop/test/`, Rust: inline in `commands.rs` |
 | Package manager | pnpm workspaces | |
 
 ## Key Conventions
 
-- **Core has no framework deps** — `@mdedit/core` imports only from `@codemirror/*`, `@lezer/*`, and standard lib. Never import Tauri or Svelte APIs in core.
+- **Core has no framework deps** — `@mdedit/core` imports from `@codemirror/*`, `@lezer/*`, standard lib, and rendering libraries (`marked`, `katex`, `mermaid`). Never import Tauri or Svelte APIs in core.
 - **File I/O through Rust only** — The webview never touches the filesystem directly. All reads/writes go through Tauri commands with path validation and atomic writes.
 - **Svelte 5 runes** — Use `$state()`, `$derived()`, `$effect()`, `$props()`. Never use legacy `let x; $: reactive` patterns. Stores use `.svelte.ts` extension.
 - **SvelteKit routing** — Main page is `src/routes/+page.svelte`, not `App.svelte`. Layout at `+layout.svelte` uses Snippet pattern: `{@render children()}`.
@@ -65,11 +69,16 @@ cd apps/desktop && pnpm check
 
 ## Core Public API (`@mdedit/core`)
 
-Editor: `createEditor`, `loadEditorContent`, `setEditorTheme`, `isFileLoad`, `detectLineSeparator`
+Editor: `createEditor`, `loadEditorContent`, `setEditorTheme`, `setContentWidth`, `setReadOnly`, `setFocusHighlight`, `setTypewriterScrolling`, `isFileLoad`, `detectLineSeparator`
 Decorations: `livePreview` (aggregates all decoration extensions)
 Toolbar: `toggleBold`, `toggleItalic`, `toggleStrikethrough`, `insertLink`, `insertImage`, `setHeading`, `toggleList`, `toggleTaskList`, `insertCodeBlock`, `insertHorizontalRule`, `insertTable`
-Other: `markdownKeybindings`, `getCursorInfo`, `lightTheme`, `darkTheme`, `setFocusHighlight`, `focusHighlight`, `setContentWidth`, `setReadOnly`, `setTypewriterScrolling`, `typewriterScrolling`
-Types: `EditorConfig`, `EditorView`, `CursorInfo`, `LineSeparator`
+Command Palette: `commandPaletteExtension`, `showCommandPalette`, `registerPaletteCommands`, `defaultCommands`, `filterCommands`
+Outline: `getOutline`
+Export: `markdownToHtml`
+Themes: `lightTheme`, `darkTheme`, `solarizedLight`, `solarizedDark`, `nordDark`, `sepiaLight`, `getTheme`, `isThemeDark`, `themeList`
+Extensions: `focusHighlight`, `typewriterScrolling`, `mathWidget`, `mermaidWidget`, `emojiDecoration`, `emojiAutocomplete`
+Other: `markdownKeybindings`, `getCursorInfo`, `parseTable`, `addColumn`, `removeColumn`, `addRow`, `removeRow`
+Types: `EditorConfig`, `EditorView`, `CursorInfo`, `LineSeparator`, `ThemeId`, `ThemeInfo`, `OutlineEntry`, `PaletteCommand`, `TableInfo`
 
 ## CM6 Gotchas
 
@@ -83,6 +92,7 @@ Headings: `ATXHeading1`-`6`, `SetextHeading1`-`2`, `HeaderMark`
 Inline: `StrongEmphasis`, `Emphasis`, `Strikethrough`, `EmphasisMark`, `StrikethroughMark`
 Links/Images: `Link`, `Image`, `LinkMark`, `URL`
 Blocks: `FencedCode`, `Blockquote`, `QuoteMark`, `HorizontalRule`, `ListItem`, `Table`
+Frontmatter: `FrontmatterBlock`, `FrontmatterMarker`, `FrontmatterContent` (custom parser)
 
 ## Tauri 2 Notes
 
@@ -90,6 +100,16 @@ Blocks: `FencedCode`, `Blockquote`, `QuoteMark`, `HorizontalRule`, `ListItem`, `
 - Menu: use `SubmenuBuilder` pattern from latest docs, not `Submenu::with_items`
 - Dialogs are Rust-side only — never import `@tauri-apps/plugin-dialog` in JS
 - `cargo test` must run from `apps/desktop/src-tauri/` directory
+- Signing: private key at `~/.tauri/mdedit.key`, secrets `TAURI_SIGNING_PRIVATE_KEY` + `TAURI_UPDATER_PUBKEY` in GitHub Actions
+- DMG bundling may fail — fallback: `hdiutil create -volname "mdedit" -srcfolder bundle/macos/mdedit.app -ov -format UDZO bundle/dmg/mdedit_X.Y.Z_aarch64.dmg`
+- `cargo` may not be in PATH — prefix commands with `PATH="$HOME/.cargo/bin:$PATH"`
+
+## CI/Release
+
+- CI: `.github/workflows/ci.yml` — runs on PR/push: pnpm test, cargo test, pnpm check
+- Release: `.github/workflows/release.yml` — triggered by `v*` tags, builds signed macOS DMG
+- Config validation: `scripts/validate-release-config.sh` — checks pubkey, signing key, endpoint
+- Pubkey substitution: `scripts/substitute-release-config.sh` — injects pubkey from CI secret
 
 ## Design Spec & Implementation Plan
 
