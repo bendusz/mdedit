@@ -25,6 +25,7 @@
   import { printHtml } from '$lib/print';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { openPath } from '@tauri-apps/plugin-opener';
+  import { exit } from '@tauri-apps/plugin-process';
   import { listen } from '@tauri-apps/api/event';
   import { setEditorTheme, setContentWidth, setReadOnly, setFocusHighlight, setTypewriterScrolling, registerPaletteCommands, getOutline, markdownToHtml, EditorView, themeList, type CursorInfo, type PaletteCommand, type OutlineEntry, type ThemeId } from '@mdedit/core';
   import OutlineSidebar from '$lib/components/OutlineSidebar.svelte';
@@ -307,6 +308,43 @@
     handlePrint();
   }
 
+  /**
+   * Quit the application, saving any dirty document first.
+   * Uses the same save logic as the close handler: auto-saves if a path exists,
+   * or prompts Save As for untitled documents. If the user cancels Save As,
+   * the quit is aborted.
+   */
+  async function handleQuit() {
+    if (fileState.isDirty) {
+      if (fileState.path) {
+        // File has a path — try to auto-save before quitting
+        try {
+          const rev = fileState.revision;
+          await saveCurrentFile(contentForSave());
+          fileState.markSaved(rev);
+        } catch (e) {
+          void logError('file-io', 'Failed to save on quit', String(e));
+          showToast('Failed to save before quitting. Your changes are preserved.', 'error', 6000);
+          return; // Abort quit so user doesn't lose work
+        }
+      } else {
+        // Untitled dirty document — offer Save As dialog
+        try {
+          const result = await saveFileAsDialog(contentForSave());
+          if (!result) {
+            return; // User cancelled — abort quit
+          }
+          fileState.setFile(result.path, result.filename, fileState.content);
+        } catch (e) {
+          void logError('file-io', 'Failed to save on quit', String(e));
+          showToast('Failed to save before quitting. Your changes are preserved.', 'error', 6000);
+          return; // Abort quit
+        }
+      }
+    }
+    await exit(0);
+  }
+
   async function handleNew() {
     if (!(await saveCurrentDocumentBeforeSwitch())) {
       return;
@@ -496,6 +534,9 @@
     } else if (mod && key === 'n') {
       e.preventDefault();
       void handleNew();
+    } else if (mod && key === 'q') {
+      e.preventDefault();
+      void handleQuit();
     }
   }
 
@@ -598,6 +639,7 @@
         case 'export_html': void handleExportHtml(); break;
         case 'print': handlePrint(); break;
         case 'export_pdf': handleExportPdf(); break;
+        case 'quit': void handleQuit(); break;
       }
     });
 
