@@ -3,9 +3,9 @@ mod menu;
 mod recent_files;
 
 use commands::{
-    accept_pending_file, add_to_recent, clear_current_file, export_html_dialog, get_recent_files,
-    open_file_dialog, queue_external_open, save_current_file, save_file_as_dialog,
-    save_pasted_image, FileAccessState,
+    accept_pending_file, add_to_recent, clear_current_file, export_html_dialog, get_log_path,
+    get_recent_files, log_error, open_file_dialog, queue_external_open, save_current_file,
+    save_file_as_dialog, save_pasted_image, FileAccessState,
 };
 use tauri::{DragDropEvent, Emitter, Manager, WindowEvent};
 use tauri_plugin_deep_link::DeepLinkExt;
@@ -92,6 +92,8 @@ pub fn run() {
             get_recent_files,
             add_to_recent,
             save_pasted_image,
+            log_error,
+            get_log_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

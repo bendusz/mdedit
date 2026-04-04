@@ -1,8 +1,9 @@
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
+use chrono::Utc;
 use serde::Serialize;
 use std::fs;
-use std::io::Write;
+use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -329,6 +330,112 @@ pub async fn add_to_recent(app: AppHandle, path: String) {
     recent_files::add_recent(&app, &path);
 }
 
+// --- Structured error logging ---
+
+const MAX_LOG_SIZE: u64 = 1_048_576; // 1 MB
+
+/// Return the path to the mdedit log directory (~/.mdedit/).
+fn log_dir() -> Result<PathBuf, String> {
+    dirs::home_dir()
+        .map(|h| h.join(".mdedit"))
+        .ok_or_else(|| "Cannot determine home directory".to_string())
+}
+
+/// Return the path to the error log file (~/.mdedit/error.log).
+fn log_file_path() -> Result<PathBuf, String> {
+    Ok(log_dir()?.join("error.log"))
+}
+
+/// Format a structured log line.
+fn format_log_line(category: &str, message: &str, details: Option<&str>) -> String {
+    let ts = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    match details {
+        Some(d) => format!("[{ts}] [{category}] {message} | {d}\n"),
+        None => format!("[{ts}] [{category}] {message}\n"),
+    }
+}
+
+/// Append a log line to the given log file path, creating parent dirs if needed.
+/// If the log exceeds MAX_LOG_SIZE, truncate the oldest half of the lines.
+fn append_log_line_to(path: &Path, line: &str) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create log directory: {e}"))?;
+    }
+
+    // Append the new line
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|e| format!("Failed to open log file: {e}"))?;
+
+    file.write_all(line.as_bytes())
+        .map_err(|e| format!("Failed to write log line: {e}"))?;
+
+    drop(file);
+
+    // Check size and truncate if needed
+    if let Ok(meta) = fs::metadata(path) {
+        if meta.len() > MAX_LOG_SIZE {
+            truncate_log(path)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Append a log line to the default error log (~/.mdedit/error.log).
+fn append_log_line(line: &str) -> Result<(), String> {
+    let path = log_file_path()?;
+    append_log_line_to(&path, line)
+}
+
+/// Truncate the log file by keeping only the newest half of lines.
+fn truncate_log(path: &Path) -> Result<(), String> {
+    let data = fs::read(path).map_err(|e| format!("Failed to read log for truncation: {e}"))?;
+    let cursor = std::io::Cursor::new(&data);
+    let lines: Vec<String> = cursor
+        .lines()
+        .filter_map(|l| l.ok())
+        .collect();
+
+    let keep_from = lines.len() / 2;
+    let kept: String = lines[keep_from..]
+        .iter()
+        .map(|l| format!("{l}\n"))
+        .collect();
+
+    let path_str = path.to_string_lossy();
+    atomic_write(&path_str, &kept)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn log_error(
+    category: String,
+    message: String,
+    details: Option<String>,
+) -> Result<(), String> {
+    let line = format_log_line(&category, &message, details.as_deref());
+    append_log_line(&line)
+}
+
+#[tauri::command]
+pub fn get_log_path() -> Result<String, String> {
+    let path = log_file_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create log directory: {e}"))?;
+    }
+    fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|e| format!("Failed to create log file: {e}"))?;
+    Ok(path.to_string_lossy().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -634,5 +741,99 @@ mod tests {
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Invalid filename"));
+    }
+
+    // --- log_error tests ---
+
+    #[test]
+    fn test_log_creates_file_and_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let log_path = dir.path().join("sub").join("error.log");
+
+        // Sub-directory doesn't exist yet
+        assert!(!log_path.exists());
+
+        let line = format_log_line("file-io", "test message", None);
+        append_log_line_to(&log_path, &line).unwrap();
+
+        assert!(log_path.exists());
+        let content = fs::read_to_string(&log_path).unwrap();
+        assert!(content.contains("[file-io] test message"));
+    }
+
+    #[test]
+    fn test_log_append_behavior() {
+        let dir = tempfile::tempdir().unwrap();
+        let log_path = dir.path().join("error.log");
+
+        let line1 = format_log_line("file-io", "first error", None);
+        let line2 = format_log_line("auto-save", "second error", Some("extra details"));
+
+        append_log_line_to(&log_path, &line1).unwrap();
+        append_log_line_to(&log_path, &line2).unwrap();
+
+        let content = fs::read_to_string(&log_path).unwrap();
+        let lines: Vec<&str> = content.lines().collect();
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains("[file-io] first error"));
+        assert!(lines[1].contains("[auto-save] second error | extra details"));
+    }
+
+    #[test]
+    fn test_log_format_with_details() {
+        let line = format_log_line("export", "conversion failed", Some("timeout after 5s"));
+        // Format: [ISO-8601] [CATEGORY] message | details
+        assert!(line.starts_with('['));
+        assert!(line.contains("] [export] conversion failed | timeout after 5s\n"));
+    }
+
+    #[test]
+    fn test_log_format_without_details() {
+        let line = format_log_line("general", "something broke", None);
+        assert!(line.starts_with('['));
+        assert!(line.contains("] [general] something broke\n"));
+        // Should NOT contain a pipe separator when no details
+        assert!(!line.contains(" | "));
+    }
+
+    #[test]
+    fn test_log_size_cap_truncation() {
+        let dir = tempfile::tempdir().unwrap();
+        let log_path = dir.path().join("error.log");
+
+        // Write enough data to exceed 1 MB
+        // Each line is ~80 bytes, need ~13000 lines to exceed 1 MB
+        let line = format_log_line("general", &"x".repeat(60), None);
+        let line_size = line.len();
+        let lines_needed = (MAX_LOG_SIZE as usize / line_size) + 100;
+
+        // Write a large block directly to the file first
+        {
+            let mut file = fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .open(&log_path)
+                .unwrap();
+            for _ in 0..lines_needed {
+                file.write_all(line.as_bytes()).unwrap();
+            }
+        }
+
+        // Verify the file exceeds the cap
+        let pre_size = fs::metadata(&log_path).unwrap().len();
+        assert!(pre_size > MAX_LOG_SIZE);
+
+        // Append one more line — this should trigger truncation
+        let trigger_line = format_log_line("general", "trigger truncation", None);
+        append_log_line_to(&log_path, &trigger_line).unwrap();
+
+        // After truncation, the file should be smaller than the cap
+        let post_size = fs::metadata(&log_path).unwrap().len();
+        assert!(post_size < pre_size);
+        assert!(post_size < MAX_LOG_SIZE);
+
+        // The newest entry should still be present
+        let content = fs::read_to_string(&log_path).unwrap();
+        assert!(content.contains("trigger truncation"));
     }
 }

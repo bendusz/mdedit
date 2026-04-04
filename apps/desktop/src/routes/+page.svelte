@@ -21,8 +21,10 @@
     savePastedImage,
     type FileData,
   } from '$lib/tauri/fileOps';
+  import { logError, getLogPath } from '$lib/logger';
   import { printHtml } from '$lib/print';
   import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { openPath } from '@tauri-apps/plugin-opener';
   import { listen } from '@tauri-apps/api/event';
   import { setEditorTheme, setContentWidth, setReadOnly, setFocusHighlight, setTypewriterScrolling, registerPaletteCommands, getOutline, markdownToHtml, EditorView, themeList, type CursorInfo, type PaletteCommand, type OutlineEntry, type ThemeId } from '@mdedit/core';
   import OutlineSidebar from '$lib/components/OutlineSidebar.svelte';
@@ -96,7 +98,7 @@
         }
       }
     } catch (e) {
-      console.error('Failed to toggle zen mode:', e);
+      void logError('general', 'Failed to toggle zen mode', String(e));
     }
 
     // Re-focus the editor after toggling
@@ -126,7 +128,7 @@
           await saveCurrentFile(contentForSave());
           fileState.markSaved(rev);
         } catch (e) {
-          console.error('Auto-save failed:', e);
+          void logError('auto-save', 'Auto-save failed', String(e));
           showToast('Auto-save failed.', 'error');
         }
       }
@@ -200,7 +202,7 @@
         fileState.markSaved(rev);
         return true;
       } catch (e) {
-        console.error('Failed to save file before switching:', e);
+        void logError('file-io', 'Failed to save file before switching', String(e));
         return false;
       }
     }
@@ -216,7 +218,7 @@
       fileState.markSaved(rev);
       return true;
     } catch (e) {
-      console.error('Failed to save file before switching:', e);
+      void logError('file-io', 'Failed to save file before switching', String(e));
       return false;
     }
   }
@@ -233,11 +235,11 @@
         try {
           await addToRecent(result.path);
         } catch (recentError) {
-          console.error('Failed to update recent files:', recentError);
+          void logError('file-io', 'Failed to update recent files', String(recentError));
         }
       }
     } catch (e) {
-      console.error('Failed to open file:', e);
+      void logError('file-io', 'Failed to open file', String(e));
       showToast('Failed to open file.', 'error');
     }
   }
@@ -259,7 +261,7 @@
       await saveCurrentFile(contentForSave());
       fileState.markSaved(rev);
     } catch (e) {
-      console.error('Failed to save file:', e);
+      void logError('file-io', 'Failed to save file', String(e));
       showToast('Failed to save file.', 'error');
     }
   }
@@ -274,7 +276,7 @@
         fileState.markSaved(rev);
       }
     } catch (e) {
-      console.error('Failed to save file:', e);
+      void logError('file-io', 'Failed to save file', String(e));
       showToast('Failed to save file.', 'error');
     }
   }
@@ -284,7 +286,7 @@
       const html = markdownToHtml(fileState.content);
       await exportHtmlDialog(html);
     } catch (e) {
-      console.error('Failed to export HTML:', e);
+      void logError('export', 'Failed to export HTML', String(e));
       showToast('Failed to export HTML.', 'error');
     }
   }
@@ -294,7 +296,7 @@
       const html = markdownToHtml(fileState.content);
       printHtml(html);
     } catch (e) {
-      console.error('Failed to print:', e);
+      void logError('export', 'Failed to print', String(e));
       showToast('Failed to print.', 'error');
     }
   }
@@ -318,7 +320,7 @@
     try {
       await clearCurrentFile();
     } catch (e) {
-      console.error('Failed to clear current file:', e);
+      void logError('file-io', 'Failed to clear current file', String(e));
     }
   }
 
@@ -384,7 +386,7 @@
         fileState.markSaved(rev);
         dir = directoryOf(result.path);
       } catch (err) {
-        console.error('Failed to save file before pasting image:', err);
+        void logError('paste', 'Failed to save file before pasting image', String(err));
         return;
       }
     }
@@ -407,7 +409,7 @@
         });
       }
     } catch (err) {
-      console.error('Failed to paste image:', err);
+      void logError('paste', 'Failed to paste image', String(err));
       showToast('Failed to paste image.', 'error');
     }
   }
@@ -454,7 +456,7 @@
         }
       }
     } catch (err) {
-      console.error('Failed to read clipboard:', err);
+      void logError('paste', 'Failed to read clipboard', String(err));
       showToast('Failed to paste image.', 'error');
     }
   }
@@ -535,10 +537,10 @@
       try {
         await addToRecent(data.path);
       } catch (recentError) {
-        console.error('Failed to update recent files:', recentError);
+        void logError('file-io', 'Failed to update recent files', String(recentError));
       }
     } catch (e) {
-      console.error('Failed to open file:', e);
+      void logError('file-io', 'Failed to open file', String(e));
       showToast('Failed to open file.', 'error');
     }
   }
@@ -568,6 +570,7 @@
         { id: 'view-toggle-typewriter', label: 'Toggle Typewriter Scrolling', category: 'View', execute: () => { toggleTypewriterMode(); } },
         { id: 'edit-paste-image', label: 'Paste Image', category: 'Edit', execute: () => { void pasteImageFromClipboard(); } },
         { id: 'app-check-updates', label: 'Check for Updates', category: 'App', execute: () => { void checkForUpdates().then((r) => { if (r.status === 'update-available') { updateDismissState.clearDismissal(); pendingUpdate = r.result; } else if (r.status === 'up-to-date') { showToast('You\'re up to date!', 'success'); } else { showToast('Update check failed. Please try again later.', 'error'); } }); } },
+        { id: 'app-view-error-log', label: 'View Error Log', category: 'App', execute: () => { void getLogPath().then((p) => openPath(p)).catch((err) => { void logError('general', 'Failed to open error log', String(err)); showToast('Failed to open error log.', 'error'); }); } },
         ...themeList.map((t) => ({
           id: `theme-${t.id}`,
           label: `Theme: ${t.label}`,
@@ -618,7 +621,7 @@
             await currentWindow.destroy();
           } catch (e) {
             // Save failed — keep window open so user doesn't lose work
-            console.error('Failed to save on close:', e);
+            void logError('file-io', 'Failed to save on close', String(e));
             showToast('Failed to save before closing. Your changes are preserved.', 'error', 6000);
           }
         } else {
@@ -632,7 +635,7 @@
             }
             // If user cancelled Save As, window stays open (event was prevented)
           } catch (e) {
-            console.error('Failed to save on close:', e);
+            void logError('file-io', 'Failed to save on close', String(e));
             showToast('Failed to save before closing. Your changes are preserved.', 'error', 6000);
           }
         }
