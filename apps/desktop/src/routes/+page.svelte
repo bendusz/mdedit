@@ -3,8 +3,10 @@
   import Editor from '$lib/components/Editor.svelte';
   import Toolbar from '$lib/components/Toolbar.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
+  import UpdateNotification from '$lib/components/UpdateNotification.svelte';
   import { fileState } from '$lib/stores/fileState.svelte';
   import { themeState } from '$lib/stores/theme.svelte';
+  import { startUpdateChecker, stopUpdateChecker, checkForUpdates, type UpdateResult } from '$lib/updater';
   import {
     acceptPendingFile,
     addToRecent,
@@ -34,6 +36,7 @@
   let preZenWidth: string | null = null;
   let preZenTypewriter: boolean = false;
   let outlineEntries: OutlineEntry[] = $state([]);
+  let pendingUpdate: UpdateResult | null = $state(null);
 
   let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
   const WELCOME_CONTENT = '# Welcome to mdedit\n\nStart typing your markdown here.';
@@ -552,6 +555,7 @@
         { id: 'view-toggle-zen-mode', label: 'Toggle Zen Mode', category: 'View', shortcut: '\u2318\u21E7F', execute: () => { void toggleZenMode(); } },
         { id: 'view-toggle-typewriter', label: 'Toggle Typewriter Scrolling', category: 'View', execute: () => { toggleTypewriterMode(); } },
         { id: 'edit-paste-image', label: 'Paste Image', category: 'Edit', execute: () => { void pasteImageFromClipboard(); } },
+        { id: 'app-check-updates', label: 'Check for Updates', category: 'App', execute: () => { void checkForUpdates().then((r) => { if (r.status === 'update-available') { pendingUpdate = r.result; } else if (r.status === 'up-to-date') { alert('You\'re up to date!'); } else { alert('Update check failed. Please try again later.'); } }); } },
         ...themeList.map((t) => ({
           id: `theme-${t.id}`,
           label: `Theme: ${t.label}`,
@@ -562,6 +566,11 @@
       registerPaletteCommands(view, appCommands);
       updateOutline();
     }
+
+    // Start periodic update checks
+    startUpdateChecker((result) => {
+      pendingUpdate = result;
+    });
 
     unlistenMenu = await listen<string>('menu-event', (event) => {
       switch (event.payload) {
@@ -619,6 +628,7 @@
     window.removeEventListener('keydown', handleKeydown);
     window.removeEventListener('paste', handlePaste);
     if (autoSaveTimer) clearTimeout(autoSaveTimer);
+    stopUpdateChecker();
     unlistenMenu?.();
     unlistenOpenFile?.();
     unlistenClose?.();
@@ -626,6 +636,7 @@
 </script>
 
 <main class="app" class:zen-mode={zenMode}>
+  <UpdateNotification update={pendingUpdate} onDismiss={() => { pendingUpdate = null; }} />
   {#if !readingMode && !zenMode}
     <Toolbar {getEditorView} />
   {/if}

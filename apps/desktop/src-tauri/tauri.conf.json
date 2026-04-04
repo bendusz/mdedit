@@ -40,13 +40,20 @@
         "description": "Markdown Document",
         "role": "Editor"
       }
-    ]
+    ],
+    "createUpdaterArtifacts": true
   },
   "plugins": {
     "deep-link": {
       "desktop": {
         "schemes": ["mdedit"]
       }
+    },
+    "updater": {
+      "endpoints": [
+        "https://github.com/mdedit/mdedit/releases/latest/download/latest.json"
+      ],
+      "pubkey": "REPLACE_WITH_REAL_PUBLIC_KEY_BEFORE_RELEASE"
     }
   }
 }
