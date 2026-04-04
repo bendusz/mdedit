@@ -12,6 +12,7 @@ import { search, searchKeymap } from '@codemirror/search';
 import { autocompletion } from '@codemirror/autocomplete';
 import { livePreview, FrontmatterExtension, emojiAutocomplete } from './extensions/live-preview';
 import { imageBasePath } from './extensions/image-widget';
+import { focusHighlight } from './extensions/focus-highlight';
 import { markdownKeybindings } from './toolbar/keybindings';
 import { commandPaletteExtension } from './command-palette/palette-extension';
 import { getCursorInfo, type CursorInfo } from './observers';
@@ -23,6 +24,7 @@ const imageBasePathCompartment = new Compartment();
 const contentWidthCompartment = new Compartment();
 const readOnlyCompartment = new Compartment();
 const mermaidDarkModeCompartment = new Compartment();
+const focusHighlightCompartment = new Compartment();
 
 export type LineSeparator = '\n' | '\r\n';
 
@@ -101,6 +103,18 @@ export function setReadOnly(view: EditorView, readOnly: boolean) {
   });
 }
 
+/**
+ * Toggle focus highlight (zen mode). When enabled, all paragraphs except
+ * the one containing the cursor are dimmed.
+ */
+export function setFocusHighlight(view: EditorView, enabled: boolean) {
+  view.dispatch({
+    effects: focusHighlightCompartment.reconfigure(
+      enabled ? focusHighlight() : [],
+    ),
+  });
+}
+
 export function createEditor(config: EditorConfig): EditorView {
   const { parent, content, dark, imageBasePath: basePath = '', contentWidth = '80ch', onDocChange, onSelectionChange } = config;
 
@@ -138,6 +152,7 @@ export function createEditor(config: EditorConfig): EditorView {
         EditorState.readOnly.of(false),
         EditorView.editable.of(true),
       ]),
+      focusHighlightCompartment.of([]),
       updateListener,
       EditorView.lineWrapping,
       EditorView.contentAttributes.of({ spellcheck: 'true' }),

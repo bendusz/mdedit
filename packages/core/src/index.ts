@@ -5,6 +5,7 @@ export {
   loadEditorContent,
   setContentWidth,
   setEditorTheme,
+  setFocusHighlight,
   setImageBasePath,
   setReadOnly,
   type EditorConfig,
@@ -70,3 +71,5 @@ export {
   removeRow,
   type TableInfo,
 } from './extensions/table-editor';
+
+export { focusHighlight } from './extensions/focus-highlight';

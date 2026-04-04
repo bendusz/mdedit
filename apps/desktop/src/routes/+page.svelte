@@ -19,7 +19,7 @@
   import { printHtml } from '$lib/print';
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { listen } from '@tauri-apps/api/event';
-  import { setEditorTheme, setContentWidth, setReadOnly, registerPaletteCommands, getOutline, markdownToHtml, EditorView, themeList, type CursorInfo, type PaletteCommand, type OutlineEntry, type ThemeId } from '@mdedit/core';
+  import { setEditorTheme, setContentWidth, setReadOnly, setFocusHighlight, registerPaletteCommands, getOutline, markdownToHtml, EditorView, themeList, type CursorInfo, type PaletteCommand, type OutlineEntry, type ThemeId } from '@mdedit/core';
   import OutlineSidebar from '$lib/components/OutlineSidebar.svelte';
   import { contentWidthState } from '$lib/stores/contentWidth.svelte';
 
@@ -29,6 +29,8 @@
   let wordCount = $state(0);
   let showOutline = $state(false);
   let readingMode = $state(false);
+  let zenMode = $state(false);
+  let preZenWidth: string | null = null;
   let outlineEntries: OutlineEntry[] = $state([]);
 
   let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -46,6 +48,40 @@
       readingMode = false;
       const view = getEditorView();
       if (view) setReadOnly(view, false);
+    }
+  }
+
+  async function toggleZenMode() {
+    const view = getEditorView();
+    if (!view) return;
+
+    const appWindow = getCurrentWindow();
+    const entering = !zenMode;
+    try {
+      if (entering) {
+        exitReadingMode();
+        await appWindow.setFullscreen(true);
+        zenMode = true;
+        preZenWidth = contentWidthState.width;
+        setContentWidth(view, '72ch');
+        setFocusHighlight(view, true);
+      } else {
+        await appWindow.setFullscreen(false);
+        zenMode = false;
+        if (preZenWidth) setContentWidth(view, preZenWidth);
+        setFocusHighlight(view, false);
+      }
+    } catch (e) {
+      console.error('Failed to toggle zen mode:', e);
+    }
+
+    // Re-focus the editor after toggling
+    view.focus();
+  }
+
+  async function exitZenMode() {
+    if (zenMode) {
+      await toggleZenMode();
     }
   }
 
@@ -394,7 +430,15 @@
   function handleKeydown(e: KeyboardEvent) {
     const mod = e.metaKey || e.ctrlKey;
     const key = e.key.toLowerCase();
-    if (mod && e.shiftKey && key === 'r') {
+    if (key === 'escape' && zenMode) {
+      e.preventDefault();
+      void exitZenMode();
+      return;
+    } else if (mod && e.shiftKey && key === 'f') {
+      e.preventDefault();
+      void toggleZenMode();
+      return;
+    } else if (mod && e.shiftKey && key === 'r') {
       e.preventDefault();
       void toggleReadingMode();
     } else if (mod && e.shiftKey && key === 'e') {
@@ -487,6 +531,7 @@
         { id: 'file-export-pdf', label: 'Export to PDF', category: 'File', execute: () => { handleExportPdf(); } },
         { id: 'view-toggle-outline', label: 'Toggle Outline', category: 'View', shortcut: '\u2318\u21E7O', execute: () => { toggleOutline(); } },
         { id: 'view-toggle-reading-mode', label: 'Toggle Reading Mode', category: 'View', shortcut: '\u2318\u21E7R', execute: () => { void toggleReadingMode(); } },
+        { id: 'view-toggle-zen-mode', label: 'Toggle Zen Mode', category: 'View', shortcut: '\u2318\u21E7F', execute: () => { void toggleZenMode(); } },
         { id: 'edit-paste-image', label: 'Paste Image', category: 'Edit', execute: () => { void pasteImageFromClipboard(); } },
         ...themeList.map((t) => ({
           id: `theme-${t.id}`,
@@ -561,15 +606,19 @@
   });
 </script>
 
-<main class="app">
-  {#if !readingMode}
+<main class="app" class:zen-mode={zenMode}>
+  {#if !readingMode && !zenMode}
     <Toolbar {getEditorView} />
   {/if}
   <div class="editor-area">
     <Editor bind:this={editor} {onDocChange} {onSelectionChange} />
-    <OutlineSidebar entries={outlineEntries} visible={showOutline} onEntryClick={handleOutlineEntryClick} />
+    {#if !zenMode}
+      <OutlineSidebar entries={outlineEntries} visible={showOutline} onEntryClick={handleOutlineEntryClick} />
+    {/if}
   </div>
-  <StatusBar line={cursorLine} col={cursorCol} {wordCount} isDirty={fileState.isDirty} {readingMode} contentWidth={contentWidthState.width} onContentWidthChange={(w) => contentWidthState.setWidth(w)} currentTheme={themeState.themeId} onThemeChange={(id: ThemeId) => themeState.setTheme(id)} />
+  {#if !zenMode}
+    <StatusBar line={cursorLine} col={cursorCol} {wordCount} isDirty={fileState.isDirty} {readingMode} contentWidth={contentWidthState.width} onContentWidthChange={(w) => contentWidthState.setWidth(w)} currentTheme={themeState.themeId} onThemeChange={(id: ThemeId) => themeState.setTheme(id)} />
+  {/if}
 </main>
 
 <style>
@@ -584,5 +633,14 @@
     display: flex;
     flex: 1;
     overflow: hidden;
+  }
+
+  .zen-mode {
+    background: var(--bg);
+  }
+
+  .zen-mode .editor-area :global(.cm-content) {
+    padding-top: 20vh;
+    padding-bottom: 40vh;
   }
 </style>
