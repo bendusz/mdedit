@@ -41,6 +41,9 @@ importers:
       '@tauri-apps/cli':
         specifier: ^2
         version: 2.10.1
+      jsdom:
+        specifier: ^26.1.0
+        version: 26.1.0
       svelte:
         specifier: ^5.0.0
         version: 5.55.1
@@ -53,6 +56,9 @@ importers:
       vite:
         specifier: ^6.0.3
         version: 6.4.1
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(jsdom@26.1.0)
 
   packages/core:
     dependencies:

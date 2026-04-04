@@ -1,6 +1,8 @@
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 
+declare const __MDEDIT_UPDATER_ENABLED__: boolean;
+
 export interface UpdateInfo {
   version: string;
   body?: string;
@@ -10,6 +12,7 @@ export interface UpdateInfo {
 export interface UpdateResult {
   info: UpdateInfo;
   downloadAndInstall: (onProgress?: (event: DownloadProgress) => void) => Promise<void>;
+  close: () => Promise<void>;
 }
 
 export interface DownloadProgress {
@@ -23,7 +26,10 @@ export interface DownloadProgress {
 export type CheckResult =
   | { status: 'update-available'; result: UpdateResult }
   | { status: 'up-to-date' }
+  | { status: 'disabled' }
   | { status: 'error'; message: string };
+
+export const updaterEnabled = __MDEDIT_UPDATER_ENABLED__;
 
 /**
  * Check for available updates.
@@ -31,9 +37,20 @@ export type CheckResult =
  * "update available", and "check failed" cases.
  */
 export async function checkForUpdates(): Promise<CheckResult> {
+  if (!updaterEnabled) {
+    return { status: 'disabled' };
+  }
+
   try {
     const update = await check();
     if (!update) return { status: 'up-to-date' };
+
+    let closed = false;
+    const close = async () => {
+      if (closed) return;
+      closed = true;
+      await update.close();
+    };
 
     const result: UpdateResult = {
       info: {
@@ -53,8 +70,10 @@ export async function checkForUpdates(): Promise<CheckResult> {
               : {},
           });
         });
+        await close();
         await relaunch();
       },
+      close,
     };
     return { status: 'update-available', result };
   } catch (e) {
@@ -75,6 +94,10 @@ let startupTimeoutId: ReturnType<typeof setTimeout> | null = null;
  * Checks once after a short startup delay, then every 4 hours.
  */
 export function startUpdateChecker(onUpdate: (result: UpdateResult) => void): void {
+  if (!updaterEnabled) {
+    return;
+  }
+
   stopUpdateChecker();
 
   const doCheck = async () => {
