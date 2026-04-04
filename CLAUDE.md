@@ -10,7 +10,7 @@ mdedit is a minimalist single-file markdown editor with Obsidian-style live prev
 
 Monorepo with two packages connected via pnpm workspaces (`workspace:*` protocol):
 
-- **`packages/core`** (`@mdedit/core`) — Standalone CodeMirror 6 library. Has ZERO dependency on Tauri or Svelte. Exports `createEditor()`, live preview decorations, toolbar commands, and observers. Testable in a browser without Tauri.
+- **`packages/core`** (`@mdedit/core`) — Standalone CodeMirror 6 editor library. No Tauri or Svelte dependency. Exports `createEditor()`, live preview decorations, toolbar commands, and observers. Testable in a browser without Tauri.
 - **`apps/desktop`** (`@mdedit/desktop`) — Tauri 2 + SvelteKit 2 app shell. Uses `adapter-static` in SPA mode (`ssr = false`). Routes at `src/routes/`, components at `src/lib/components/`, stores at `src/lib/stores/`.
 
 ### Security Boundary
@@ -100,9 +100,14 @@ Frontmatter: `FrontmatterBlock`, `FrontmatterMarker`, `FrontmatterContent` (cust
 - Menu: use `SubmenuBuilder` pattern from latest docs, not `Submenu::with_items`
 - Dialogs are Rust-side only — never import `@tauri-apps/plugin-dialog` in JS
 - `cargo test` must run from `apps/desktop/src-tauri/` directory
-- Signing: private key at `~/.tauri/mdedit.key`, secrets `TAURI_SIGNING_PRIVATE_KEY` + `TAURI_UPDATER_PUBKEY` in GitHub Actions
-- DMG bundling may fail — fallback: `hdiutil create -volname "mdedit" -srcfolder bundle/macos/mdedit.app -ov -format UDZO bundle/dmg/mdedit_X.Y.Z_aarch64.dmg`
 - `cargo` may not be in PATH — prefix commands with `PATH="$HOME/.cargo/bin:$PATH"`
+- Signing keys configured via GitHub Actions secrets (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_UPDATER_PUBKEY`)
+
+## Error Logging
+
+- Desktop errors logged to `~/.mdedit/error.log` via Rust `log_error` command
+- Use `logError(category, message, details?)` from `$lib/logger.ts` — categories: `file-io`, `auto-save`, `export`, `update`, `paste`, `general`
+- Log capped at 1MB with automatic truncation
 
 ## CI/Release
 
