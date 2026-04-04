@@ -8,6 +8,7 @@
   import { showToast } from '$lib/stores/toast.svelte';
   import { fileState } from '$lib/stores/fileState.svelte';
   import { themeState } from '$lib/stores/theme.svelte';
+  import { updateDismissState } from '$lib/stores/updateDismiss.svelte';
   import { startUpdateChecker, stopUpdateChecker, checkForUpdates, type UpdateResult } from '$lib/updater';
   import {
     acceptPendingFile,
@@ -566,7 +567,7 @@
         { id: 'view-toggle-zen-mode', label: 'Toggle Zen Mode', category: 'View', shortcut: '\u2318\u21E7F', execute: () => { void toggleZenMode(); } },
         { id: 'view-toggle-typewriter', label: 'Toggle Typewriter Scrolling', category: 'View', execute: () => { toggleTypewriterMode(); } },
         { id: 'edit-paste-image', label: 'Paste Image', category: 'Edit', execute: () => { void pasteImageFromClipboard(); } },
-        { id: 'app-check-updates', label: 'Check for Updates', category: 'App', execute: () => { void checkForUpdates().then((r) => { if (r.status === 'update-available') { pendingUpdate = r.result; } else if (r.status === 'up-to-date') { showToast('You\'re up to date!', 'success'); } else { showToast('Update check failed. Please try again later.', 'error'); } }); } },
+        { id: 'app-check-updates', label: 'Check for Updates', category: 'App', execute: () => { void checkForUpdates().then((r) => { if (r.status === 'update-available') { updateDismissState.clearDismissal(); pendingUpdate = r.result; } else if (r.status === 'up-to-date') { showToast('You\'re up to date!', 'success'); } else { showToast('Update check failed. Please try again later.', 'error'); } }); } },
         ...themeList.map((t) => ({
           id: `theme-${t.id}`,
           label: `Theme: ${t.label}`,
@@ -578,9 +579,11 @@
       updateOutline();
     }
 
-    // Start periodic update checks
+    // Start periodic update checks (respect dismissal for background checks)
     startUpdateChecker((result) => {
-      pendingUpdate = result;
+      if (!updateDismissState.isDismissed(result.info.version)) {
+        pendingUpdate = result;
+      }
     });
 
     unlistenMenu = await listen<string>('menu-event', (event) => {

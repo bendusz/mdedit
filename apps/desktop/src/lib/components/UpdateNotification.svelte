@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { UpdateResult } from '$lib/updater';
+  import { updateDismissState } from '$lib/stores/updateDismiss.svelte';
 
   let { update, onDismiss }: {
     update: UpdateResult | null;
@@ -8,6 +9,9 @@
 
   let installing = $state(false);
   let progress = $state('');
+
+  /** Whether the current update version has been dismissed by the user. */
+  let dismissed = $derived(update ? updateDismissState.isDismissed(update.info.version) : false);
 
   async function handleInstall() {
     if (!update) return;
@@ -31,14 +35,21 @@
       installing = false;
     }
   }
+
+  function handleDismiss() {
+    if (update) {
+      updateDismissState.dismiss(update.info.version);
+    }
+    onDismiss();
+  }
 </script>
 
-{#if update && !installing}
+{#if update && !installing && !dismissed}
   <div class="update-bar" role="status">
     <span class="update-message">Update available: v{update.info.version}</span>
     <div class="update-actions">
       <button class="update-btn primary" onclick={handleInstall}>Update Now</button>
-      <button class="update-btn" onclick={onDismiss}>Later</button>
+      <button class="update-btn" onclick={handleDismiss}>Later</button>
     </div>
   </div>
 {:else if installing}
