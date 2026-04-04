@@ -2,6 +2,12 @@
   "name": "@mdedit/core",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bendusz/mdedit.git",
+    "directory": "packages/core"
+  },
   "type": "module",
   "main": "./src/index.ts",
   "scripts": {

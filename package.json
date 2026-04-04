@@ -1,6 +1,15 @@
 {
   "name": "mdedit",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bendusz/mdedit.git"
+  },
+  "homepage": "https://github.com/bendusz/mdedit",
+  "bugs": {
+    "url": "https://github.com/bendusz/mdedit/issues"
+  },
   "scripts": {
     "dev": "pnpm --filter @mdedit/desktop tauri dev",
     "build": "pnpm --filter @mdedit/core build && pnpm --filter @mdedit/desktop tauri build",
