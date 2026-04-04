@@ -4,6 +4,8 @@
   import Toolbar from '$lib/components/Toolbar.svelte';
   import StatusBar from '$lib/components/StatusBar.svelte';
   import UpdateNotification from '$lib/components/UpdateNotification.svelte';
+  import Toast from '$lib/components/Toast.svelte';
+  import { showToast } from '$lib/stores/toast.svelte';
   import { fileState } from '$lib/stores/fileState.svelte';
   import { themeState } from '$lib/stores/theme.svelte';
   import { startUpdateChecker, stopUpdateChecker, checkForUpdates, type UpdateResult } from '$lib/updater';
@@ -124,6 +126,7 @@
           fileState.markSaved(rev);
         } catch (e) {
           console.error('Auto-save failed:', e);
+          showToast('Auto-save failed.', 'error');
         }
       }
     }, 2000);
@@ -234,6 +237,7 @@
       }
     } catch (e) {
       console.error('Failed to open file:', e);
+      showToast('Failed to open file.', 'error');
     }
   }
 
@@ -255,6 +259,7 @@
       fileState.markSaved(rev);
     } catch (e) {
       console.error('Failed to save file:', e);
+      showToast('Failed to save file.', 'error');
     }
   }
 
@@ -269,6 +274,7 @@
       }
     } catch (e) {
       console.error('Failed to save file:', e);
+      showToast('Failed to save file.', 'error');
     }
   }
 
@@ -278,6 +284,7 @@
       await exportHtmlDialog(html);
     } catch (e) {
       console.error('Failed to export HTML:', e);
+      showToast('Failed to export HTML.', 'error');
     }
   }
 
@@ -287,6 +294,7 @@
       printHtml(html);
     } catch (e) {
       console.error('Failed to print:', e);
+      showToast('Failed to print.', 'error');
     }
   }
 
@@ -399,6 +407,7 @@
       }
     } catch (err) {
       console.error('Failed to paste image:', err);
+      showToast('Failed to paste image.', 'error');
     }
   }
 
@@ -445,6 +454,7 @@
       }
     } catch (err) {
       console.error('Failed to read clipboard:', err);
+      showToast('Failed to paste image.', 'error');
     }
   }
 
@@ -528,6 +538,7 @@
       }
     } catch (e) {
       console.error('Failed to open file:', e);
+      showToast('Failed to open file.', 'error');
     }
   }
 
@@ -555,7 +566,7 @@
         { id: 'view-toggle-zen-mode', label: 'Toggle Zen Mode', category: 'View', shortcut: '\u2318\u21E7F', execute: () => { void toggleZenMode(); } },
         { id: 'view-toggle-typewriter', label: 'Toggle Typewriter Scrolling', category: 'View', execute: () => { toggleTypewriterMode(); } },
         { id: 'edit-paste-image', label: 'Paste Image', category: 'Edit', execute: () => { void pasteImageFromClipboard(); } },
-        { id: 'app-check-updates', label: 'Check for Updates', category: 'App', execute: () => { void checkForUpdates().then((r) => { if (r.status === 'update-available') { pendingUpdate = r.result; } else if (r.status === 'up-to-date') { alert('You\'re up to date!'); } else { alert('Update check failed. Please try again later.'); } }); } },
+        { id: 'app-check-updates', label: 'Check for Updates', category: 'App', execute: () => { void checkForUpdates().then((r) => { if (r.status === 'update-available') { pendingUpdate = r.result; } else if (r.status === 'up-to-date') { showToast('You\'re up to date!', 'success'); } else { showToast('Update check failed. Please try again later.', 'error'); } }); } },
         ...themeList.map((t) => ({
           id: `theme-${t.id}`,
           label: `Theme: ${t.label}`,
@@ -605,6 +616,7 @@
           } catch (e) {
             // Save failed — keep window open so user doesn't lose work
             console.error('Failed to save on close:', e);
+            showToast('Failed to save before closing. Your changes are preserved.', 'error', 6000);
           }
         } else {
           // Untitled dirty document — offer Save As dialog
@@ -618,6 +630,7 @@
             // If user cancelled Save As, window stays open (event was prevented)
           } catch (e) {
             console.error('Failed to save on close:', e);
+            showToast('Failed to save before closing. Your changes are preserved.', 'error', 6000);
           }
         }
       }
@@ -634,6 +647,8 @@
     unlistenClose?.();
   });
 </script>
+
+<Toast />
 
 <main class="app" class:zen-mode={zenMode}>
   <UpdateNotification update={pendingUpdate} onDismiss={() => { pendingUpdate = null; }} />
