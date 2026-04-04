@@ -2,6 +2,9 @@ import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 
 declare const __MDEDIT_UPDATER_ENABLED__: boolean;
+declare const __MDEDIT_UPDATER_PUBKEY__: string;
+
+const PLACEHOLDER_PUBKEY = 'REPLACE_WITH_REAL_PUBLIC_KEY_BEFORE_RELEASE';
 
 export interface UpdateInfo {
   version: string;
@@ -29,7 +32,13 @@ export type CheckResult =
   | { status: 'disabled' }
   | { status: 'error'; message: string };
 
-export const updaterEnabled = __MDEDIT_UPDATER_ENABLED__;
+/**
+ * The updater is enabled only when the build-time flag is true AND the pubkey
+ * has been substituted with a real value. This prevents dev builds from
+ * attempting update checks with a placeholder key.
+ */
+export const updaterEnabled =
+  __MDEDIT_UPDATER_ENABLED__ && __MDEDIT_UPDATER_PUBKEY__ !== PLACEHOLDER_PUBKEY;
 
 /**
  * Check for available updates.

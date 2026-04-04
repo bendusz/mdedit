@@ -8,6 +8,16 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [sveltekit()],
 
+  define: {
+    // Build-time flag: true only when MDEDIT_UPDATER_PUBKEY env var is set (CI release builds).
+    // Dev builds default to false, disabling update checks entirely.
+    __MDEDIT_UPDATER_ENABLED__: !!process.env.MDEDIT_UPDATER_PUBKEY,
+    // Inject the real pubkey at build time; falls back to the placeholder in dev.
+    __MDEDIT_UPDATER_PUBKEY__: JSON.stringify(
+      process.env.MDEDIT_UPDATER_PUBKEY || 'REPLACE_WITH_REAL_PUBLIC_KEY_BEFORE_RELEASE'
+    ),
+  },
+
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
   // 1. prevent Vite from obscuring rust errors

@@ -256,6 +256,29 @@ describe('checkForUpdates with updaterEnabled = false', () => {
   });
 });
 
+describe('checkForUpdates with placeholder pubkey', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.resetModules();
+    // __MDEDIT_UPDATER_ENABLED__ is true (via vitest.config.ts define)
+    // but the pubkey is the placeholder, so updaterEnabled should be false
+    vi.stubGlobal('__MDEDIT_UPDATER_PUBKEY__', 'REPLACE_WITH_REAL_PUBLIC_KEY_BEFORE_RELEASE');
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns { status: "disabled" } when pubkey is the placeholder', async () => {
+    const { checkForUpdates: check, updaterEnabled } = await import('../src/lib/updater');
+    expect(updaterEnabled).toBe(false);
+
+    const result = await check();
+    expect(result).toEqual({ status: 'disabled' });
+    expect(mockCheck).not.toHaveBeenCalled();
+  });
+});
+
 describe('startUpdateChecker with updaterEnabled = false', () => {
   beforeEach(() => {
     vi.resetAllMocks();

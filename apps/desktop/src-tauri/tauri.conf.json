@@ -53,7 +53,7 @@
       "endpoints": [
         "https://github.com/bendusz/mdedit/releases/latest/download/latest.json"
       ],
-      "_pubkey_setup": "Generate keys: pnpm tauri signer generate -w ~/.tauri/mdedit.key  |  Copy the public key here and set TAURI_SIGNING_PRIVATE_KEY + TAURI_SIGNING_PRIVATE_KEY_PASSWORD as GitHub Actions secrets.",
+      "_pubkey_setup": "Generate keys: pnpm tauri signer generate -w ~/.tauri/mdedit.key  |  Set TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD, and TAURI_UPDATER_PUBKEY as GitHub Actions secrets. The CI release workflow substitutes the real pubkey into this file via scripts/substitute-release-config.sh before building.",
       "pubkey": "REPLACE_WITH_REAL_PUBLIC_KEY_BEFORE_RELEASE"
     }
   }

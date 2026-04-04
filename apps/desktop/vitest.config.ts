@@ -10,10 +10,12 @@ export default defineConfig({
     },
   },
   define: {
-    // Provide a default value for the build-time flag so tests can import
+    // Provide default values for the build-time flags so tests can import
     // updater.ts without a Tauri/Vite build step. Individual tests can
     // override the runtime behaviour via vi.stubGlobal('__MDEDIT_UPDATER_ENABLED__', false).
     __MDEDIT_UPDATER_ENABLED__: true,
+    // Use a non-placeholder pubkey in tests so updaterEnabled evaluates to true.
+    __MDEDIT_UPDATER_PUBKEY__: JSON.stringify('dW50cnVzdGVkIGNvbW1lbnQ6IHRlc3Qga2V5IGZvciB2aXRlc3Q='),
   },
   esbuild: {
     // tsconfig.json extends .svelte-kit/tsconfig.json which is only generated
