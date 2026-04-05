@@ -26,6 +26,11 @@ export function acceptPendingFile(path: string): Promise<void> {
   return invoke<void>('accept_pending_file', { path });
 }
 
+/** Check for a file opened during cold start (before the webview was ready). */
+export function getStartupFile(): Promise<FileData | null> {
+  return invoke<FileData | null>('get_startup_file');
+}
+
 /** Clear the Rust-tracked current file path for new/untitled documents. */
 export function clearCurrentFile(): Promise<void> {
   return invoke<void>('clear_current_file');

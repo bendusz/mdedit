@@ -25,6 +25,7 @@ pub struct FileData {
 pub struct FileAccessState {
     current_path: Mutex<Option<String>>,
     pending_path: Mutex<Option<String>>,
+    startup_file: Mutex<Option<FileData>>,
 }
 
 impl FileAccessState {
@@ -38,6 +39,14 @@ impl FileAccessState {
 
     fn queue_pending_path(&self, path: String) {
         *self.pending_path.lock().unwrap() = Some(path);
+    }
+
+    pub fn store_startup_file(&self, data: FileData) {
+        *self.startup_file.lock().unwrap() = Some(data);
+    }
+
+    pub fn take_startup_file(&self) -> Option<FileData> {
+        self.startup_file.lock().unwrap().take()
     }
 
     fn accept_pending_path(&self, expected_path: &str) -> Result<(), String> {
@@ -199,6 +208,13 @@ pub fn accept_pending_file(
     path: String,
 ) -> Result<(), String> {
     access.accept_pending_path(&path)
+}
+
+#[tauri::command]
+pub fn get_startup_file(
+    access: State<'_, FileAccessState>,
+) -> Option<FileData> {
+    access.take_startup_file()
 }
 
 #[tauri::command]
@@ -565,6 +581,28 @@ mod tests {
     fn test_accept_pending_path_errors_when_empty() {
         let access = FileAccessState::default();
         assert!(access.accept_pending_path("/tmp/example.md").is_err());
+    }
+
+    #[test]
+    fn test_startup_file_stored_and_taken_once() {
+        let access = FileAccessState::default();
+        assert!(access.take_startup_file().is_none());
+
+        access.store_startup_file(FileData {
+            path: "/tmp/startup.md".to_string(),
+            content: "# Hello".to_string(),
+            filename: "startup.md".to_string(),
+        });
+
+        let taken = access.take_startup_file();
+        assert!(taken.is_some());
+        let data = taken.unwrap();
+        assert_eq!(data.path, "/tmp/startup.md");
+        assert_eq!(data.content, "# Hello");
+        assert_eq!(data.filename, "startup.md");
+
+        // Second take returns None
+        assert!(access.take_startup_file().is_none());
     }
 
     #[test]

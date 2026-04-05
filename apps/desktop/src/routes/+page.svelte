@@ -15,6 +15,7 @@
     addToRecent,
     clearCurrentFile,
     exportHtmlDialog,
+    getStartupFile,
     openFileDialog,
     saveCurrentFile,
     saveFileAsDialog,
@@ -647,6 +648,16 @@
     unlistenOpenFile = await listen<FileData>('open-file', (event) => {
       void handleOpenExternalFile(event.payload);
     });
+
+    // Check for a file opened during cold start (before the webview was ready).
+    try {
+      const startupFile = await getStartupFile();
+      if (startupFile) {
+        void handleOpenExternalFile(startupFile);
+      }
+    } catch (e) {
+      void logError('file-io', 'Failed to check startup file', String(e));
+    }
 
     // Guard against closing with unsaved changes — auto-save before quit
     const currentWindow = getCurrentWindow();
