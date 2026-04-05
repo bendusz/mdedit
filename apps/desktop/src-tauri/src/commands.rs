@@ -627,7 +627,7 @@ mod tests {
 
         // Simulate what get_startup_file command does
         let data = access.take_startup_file().unwrap();
-        let _ = access.accept_pending_path(&data.path);
+        access.accept_pending_path(&data.path).expect("accept_pending_path should succeed for matching path");
 
         // current_path should now be set
         assert_eq!(access.current_path(), Some("/tmp/startup.md".to_string()));
