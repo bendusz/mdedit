@@ -24,19 +24,28 @@ pub fn run() {
 
             // Handle files opened via OS file association (double-click in Finder).
             // The deep-link plugin delivers file:// URLs through on_open_url.
+            // Single-document editor: open the first file, log any extras.
             let handle = app.handle().clone();
             app.deep_link().on_open_url(move |event| {
                 let access = handle.state::<FileAccessState>();
-                for url in event.urls() {
-                    if url.scheme() == "file" {
-                        if let Ok(path) = url.to_file_path() {
-                            match queue_external_open(&access, &path) {
-                                Ok(data) => {
-                                    let _ = handle.emit("open-file", data);
-                                }
-                                Err(err) => eprintln!("Failed to queue deep-link open: {err}"),
-                            }
+                let file_urls: Vec<_> = event
+                    .urls()
+                    .iter()
+                    .filter(|url| url.scheme() == "file")
+                    .filter_map(|url| url.to_file_path().ok())
+                    .collect();
+                if file_urls.len() > 1 {
+                    eprintln!(
+                        "Multiple files requested; opening first, skipping {} others",
+                        file_urls.len() - 1
+                    );
+                }
+                if let Some(path) = file_urls.first() {
+                    match queue_external_open(&access, path) {
+                        Ok(data) => {
+                            let _ = handle.emit("open-file", data);
                         }
+                        Err(err) => eprintln!("Failed to queue deep-link open: {err}"),
                     }
                 }
             });
@@ -44,21 +53,33 @@ pub fn run() {
             // Check if the app was launched with a file argument (cold start).
             // Store the file data for the frontend to pick up via get_startup_file
             // instead of emitting an event (the webview isn't ready yet).
-            if let Ok(Some(urls)) = app.deep_link().get_current() {
-                let handle = app.handle().clone();
-                let access = handle.state::<FileAccessState>();
-                for url in urls {
-                    if url.scheme() == "file" {
-                        if let Ok(path) = url.to_file_path() {
-                            match queue_external_open(&access, &path) {
-                                Ok(data) => {
-                                    access.store_startup_file(data);
-                                }
-                                Err(err) => eprintln!("Failed to queue startup open: {err}"),
+            // Single-document editor: open the first file, log any extras.
+            match app.deep_link().get_current() {
+                Ok(Some(urls)) => {
+                    let handle = app.handle().clone();
+                    let access = handle.state::<FileAccessState>();
+                    let file_paths: Vec<_> = urls
+                        .iter()
+                        .filter(|url| url.scheme() == "file")
+                        .filter_map(|url| url.to_file_path().ok())
+                        .collect();
+                    if file_paths.len() > 1 {
+                        eprintln!(
+                            "Multiple files at startup; opening first, skipping {} others",
+                            file_paths.len() - 1
+                        );
+                    }
+                    if let Some(path) = file_paths.first() {
+                        match queue_external_open(&access, path) {
+                            Ok(data) => {
+                                access.store_startup_file(data);
                             }
+                            Err(err) => eprintln!("Failed to queue startup open: {err}"),
                         }
                     }
                 }
+                Ok(None) => {}
+                Err(err) => eprintln!("Failed to check deep-link launch URLs: {err}"),
             }
 
             Ok(())

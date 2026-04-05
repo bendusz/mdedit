@@ -650,10 +650,17 @@
     });
 
     // Check for a file opened during cold start (before the webview was ready).
+    // get_startup_file already accepted the pending path atomically in Rust,
+    // so we apply the file directly without calling acceptPendingFile.
     try {
       const startupFile = await getStartupFile();
       if (startupFile) {
-        void handleOpenExternalFile(startupFile);
+        applyLoadedFile(startupFile);
+        try {
+          await addToRecent(startupFile.path);
+        } catch (recentError) {
+          void logError('file-io', 'Failed to update recent files', String(recentError));
+        }
       }
     } catch (e) {
       void logError('file-io', 'Failed to check startup file', String(e));

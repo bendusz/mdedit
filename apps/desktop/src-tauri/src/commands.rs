@@ -214,7 +214,12 @@ pub fn accept_pending_file(
 pub fn get_startup_file(
     access: State<'_, FileAccessState>,
 ) -> Option<FileData> {
-    access.take_startup_file()
+    let data = access.take_startup_file()?;
+    // Atomically promote the pending path to current_path so there is no
+    // window where another open can overwrite pending_path before the
+    // frontend calls accept_pending_file.
+    let _ = access.accept_pending_path(&data.path);
+    Some(data)
 }
 
 #[tauri::command]
@@ -603,6 +608,30 @@ mod tests {
 
         // Second take returns None
         assert!(access.take_startup_file().is_none());
+    }
+
+    #[test]
+    fn test_startup_file_take_also_accepts_pending_path() {
+        // Simulates the full cold-start flow: queue_external_open sets
+        // pending_path, store_startup_file stores data. Taking the startup
+        // file should atomically promote pending_path to current_path.
+        let access = FileAccessState::default();
+        access.queue_pending_path("/tmp/startup.md".to_string());
+        access.store_startup_file(FileData {
+            path: "/tmp/startup.md".to_string(),
+            content: "# Cold start".to_string(),
+            filename: "startup.md".to_string(),
+        });
+
+        // Simulate what get_startup_file command does
+        let data = access.take_startup_file().unwrap();
+        let _ = access.accept_pending_path(&data.path);
+
+        // current_path should now be set
+        assert_eq!(access.current_path(), Some("/tmp/startup.md".to_string()));
+
+        // pending_path should be consumed — accepting again should fail
+        assert!(access.accept_pending_path("/tmp/startup.md").is_err());
     }
 
     #[test]
