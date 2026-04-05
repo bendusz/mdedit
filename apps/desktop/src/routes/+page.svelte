@@ -15,6 +15,7 @@
     addToRecent,
     clearCurrentFile,
     exportHtmlDialog,
+    getStartupFile,
     openFileDialog,
     saveCurrentFile,
     saveFileAsDialog,
@@ -647,6 +648,24 @@
     unlistenOpenFile = await listen<FileData>('open-file', (event) => {
       void handleOpenExternalFile(event.payload);
     });
+
+    // Check for a file opened during cold start (before the webview was ready).
+    // get_startup_file already accepted the pending path atomically in Rust,
+    // so we apply the file directly without calling acceptPendingFile.
+    try {
+      const startupFile = await getStartupFile();
+      if (startupFile) {
+        applyLoadedFile(startupFile);
+        try {
+          await addToRecent(startupFile.path);
+        } catch (recentError) {
+          void logError('file-io', 'Failed to update recent files', String(recentError));
+        }
+      }
+    } catch (e) {
+      void logError('file-io', 'Failed to open startup file', String(e));
+      showToast('Failed to open startup file.', 'error');
+    }
 
     // Guard against closing with unsaved changes — auto-save before quit
     const currentWindow = getCurrentWindow();
