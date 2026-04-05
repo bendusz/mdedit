@@ -663,7 +663,8 @@
         }
       }
     } catch (e) {
-      void logError('file-io', 'Failed to check startup file', String(e));
+      void logError('file-io', 'Failed to open startup file', String(e));
+      showToast('Failed to open startup file.', 'error');
     }
 
     // Guard against closing with unsaved changes — auto-save before quit

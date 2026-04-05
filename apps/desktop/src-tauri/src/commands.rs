@@ -213,13 +213,15 @@ pub fn accept_pending_file(
 #[tauri::command]
 pub fn get_startup_file(
     access: State<'_, FileAccessState>,
-) -> Option<FileData> {
-    let data = access.take_startup_file()?;
+) -> Result<Option<FileData>, String> {
+    let Some(data) = access.take_startup_file() else {
+        return Ok(None);
+    };
     // Atomically promote the pending path to current_path so there is no
     // window where another open can overwrite pending_path before the
     // frontend calls accept_pending_file.
-    let _ = access.accept_pending_path(&data.path);
-    Some(data)
+    access.accept_pending_path(&data.path)?;
+    Ok(Some(data))
 }
 
 #[tauri::command]
