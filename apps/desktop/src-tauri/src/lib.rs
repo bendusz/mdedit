@@ -43,44 +43,18 @@ pub fn run() {
                 if let Some(path) = file_urls.first() {
                     match queue_external_open(&access, path) {
                         Ok(data) => {
+                            // Buffer for cold start (frontend drains via get_startup_file
+                            // on mount). Also emit for hot opens where the listener is
+                            // already attached. The two paths are mutually exclusive:
+                            // cold start loses the emit (no listener yet), hot open
+                            // ignores the buffer (already drained on mount).
+                            access.store_startup_file(data.clone());
                             let _ = handle.emit("open-file", data);
                         }
                         Err(err) => eprintln!("Failed to queue deep-link open: {err}"),
                     }
                 }
             });
-
-            // Check if the app was launched with a file argument (cold start).
-            // Store the file data for the frontend to pick up via get_startup_file
-            // instead of emitting an event (the webview isn't ready yet).
-            // Single-document editor: open the first file, log any extras.
-            match app.deep_link().get_current() {
-                Ok(Some(urls)) => {
-                    let handle = app.handle().clone();
-                    let access = handle.state::<FileAccessState>();
-                    let file_paths: Vec<_> = urls
-                        .iter()
-                        .filter(|url| url.scheme() == "file")
-                        .filter_map(|url| url.to_file_path().ok())
-                        .collect();
-                    if file_paths.len() > 1 {
-                        eprintln!(
-                            "Multiple files at startup; opening first, skipping {} others",
-                            file_paths.len() - 1
-                        );
-                    }
-                    if let Some(path) = file_paths.first() {
-                        match queue_external_open(&access, path) {
-                            Ok(data) => {
-                                access.store_startup_file(data);
-                            }
-                            Err(err) => eprintln!("Failed to queue startup open: {err}"),
-                        }
-                    }
-                }
-                Ok(None) => {}
-                Err(err) => eprintln!("Failed to check deep-link launch URLs: {err}"),
-            }
 
             Ok(())
         })

@@ -13,7 +13,7 @@
   onMount(() => {
     view = createEditor({
       parent: container,
-      content: '# Welcome to mdedit\n\nStart typing your markdown here.',
+      content: '',
       onDocChange,
       onSelectionChange,
     });
