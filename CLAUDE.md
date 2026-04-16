@@ -15,7 +15,7 @@ Monorepo with two packages connected via pnpm workspaces (`workspace:*` protocol
 
 ### Security Boundary
 
-The Rust backend owns all filesystem access and native dialogs. The webview has no ambient filesystem or dialog permissions — it calls high-level Tauri commands (`open_file_dialog`, `save_file`, `save_file_as_dialog`) via `invoke()` and receives only content and metadata. File paths are validated as absolute in Rust. Saves use atomic write (temp file + rename).
+The Rust backend owns all filesystem access and native dialogs. The webview has no ambient filesystem or dialog permissions — it calls high-level Tauri commands (`open_file_dialog`, `save_file`, `save_file_as_dialog`) via `invoke()` and receives only content and metadata. File paths are validated as absolute in Rust. Saves use atomic write (temp file + rename). External file opens (file association, drag-drop) use a two-phase commit: `pending_path` → `accept_pending_file` → `current_path`. The frontend cannot promote an arbitrary path — only the exact path Rust queued.
 
 ### File State Model
 
@@ -96,6 +96,7 @@ Frontmatter: `FrontmatterBlock`, `FrontmatterMarker`, `FrontmatterContent` (cust
 
 ## Tauri 2 Notes
 
+- File association cold start: `deep_link().get_current()` fires during `setup` before the webview is ready — store data in managed state and let the frontend poll via a Tauri command in `onMount`, don't `emit` events
 - Drag-and-drop: `getCurrentWebview().onDragDropEvent()` (NOT `getCurrentWindow()`)
 - Menu: use `SubmenuBuilder` pattern from latest docs, not `Submenu::with_items`
 - Dialogs are Rust-side only — never import `@tauri-apps/plugin-dialog` in JS
@@ -112,6 +113,7 @@ Frontmatter: `FrontmatterBlock`, `FrontmatterMarker`, `FrontmatterContent` (cust
 ## CI/Release
 
 - CI: `.github/workflows/ci.yml` — runs on PR/push: pnpm test, cargo test, pnpm check
+- pnpm version pinned in `package.json` `packageManager` field — do NOT also set `version:` in `pnpm/action-setup` (causes "Multiple versions" error)
 - Release: `.github/workflows/release.yml` — triggered by `v*` tags, builds signed macOS DMG
 - Config validation: `scripts/validate-release-config.sh` — checks pubkey, signing key, endpoint
 - Pubkey substitution: `scripts/substitute-release-config.sh` — injects pubkey from CI secret

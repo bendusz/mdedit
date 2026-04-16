@@ -46,7 +46,7 @@
   let pendingUpdate: UpdateResult | null = $state(null);
 
   let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
-  const WELCOME_CONTENT = '# Welcome to mdedit\n\nStart typing your markdown here.';
+  const EMPTY_CONTENT = '';
 
   function directoryOf(filePath: string | null): string {
     if (!filePath) {
@@ -354,7 +354,7 @@
     exitReadingMode();
     fileState.reset();
     editor.setFileBasePath('');
-    editor.loadFile(WELCOME_CONTENT);
+    editor.loadFile(EMPTY_CONTENT);
     updateOutline();
     try {
       await clearCurrentFile();
